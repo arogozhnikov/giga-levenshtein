@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import rust_levenshtein
 
 
-def _naive_py_levenshtein(a: str, b: str) -> int:
+def _naive_py_levenshtein(a: bytes, b: bytes) -> int:
     m, n = len(a), len(b)
     if m == 0:
         return n
@@ -28,7 +28,7 @@ def _naive_py_levenshtein(a: str, b: str) -> int:
 
 
 def py_1_to_n(
-    left: str, right: list[str], dist_func: Callable[[str, str], int]
+    left: bytes, right: list[str], dist_func: Callable[[str, str], int]
 ) -> list[int]:
     return [dist_func(left, r) for r in right]
 
@@ -39,13 +39,13 @@ def py_m_to_n(
     return [[dist_func(l, r) for r in right] for l in left]
 
 
-def random_string(length: int) -> str:
-    return "".join(random.choices(string.ascii_lowercase, k=length))
+def random_bytes(length: int) -> bytes:
+    return bytes(random.choices(range(128), k=length))
 
 
 @dataclass
 class BenchResult:
-    label: str
+    label: bytes
     python_ms: float
     rust_ms: float
 
@@ -78,22 +78,22 @@ def _timeit(fn, *args, repeats: int = 3) -> float:
 def bench_1_to_n(
     n: int, str_len: int, dist_func: Callable[[str, str], int]
 ) -> BenchResult:
-    left = random_string(str_len)
-    right = [random_string(str_len) for _ in range(n)]
+    left = random_bytes(str_len)
+    right = [random_bytes(str_len) for _ in range(n)]
 
     py_ms = _timeit(py_1_to_n, left, right, dist_func)
-    rs_ms = _timeit(rust_levenshtein.compute_levenshtein_1_to_n, left, right)
+    rs_ms = _timeit(rust_levenshtein.compute_levenshtein_1_to_n_bytes, left, right)
     return BenchResult(f"1_to_{n}  (strlen={str_len})", py_ms, rs_ms)
 
 
 def bench_m_to_n(
     m: int, n: int, str_len: int, dist_func: Callable[[str, str], int]
 ) -> BenchResult:
-    left = [random_string(str_len) for _ in range(m)]
-    right = [random_string(str_len) for _ in range(n)]
+    left = [random_bytes(str_len) for _ in range(m)]
+    right = [random_bytes(str_len) for _ in range(n)]
 
     py_ms = _timeit(py_m_to_n, left, right, dist_func)
-    rs_ms = _timeit(rust_levenshtein.compute_levenshtein_m_to_n, left, right)
+    rs_ms = _timeit(rust_levenshtein.compute_levenshtein_m_to_n_bytes, left, right)
     return BenchResult(f"{m}_to_{n}  (strlen={str_len})", py_ms, rs_ms)
 
 

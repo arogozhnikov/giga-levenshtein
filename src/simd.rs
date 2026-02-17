@@ -22,6 +22,69 @@ fn levenshtein(a: &str, b: &str) -> usize {
     prev[n]
 }
 
+fn myers_levenshtein(a: &[u8], b: &[u8]) -> u8 {
+    let n = b.len();
+    if n == 0 {
+        return a.len() as u8;
+    };
+    if a.len() == 0 {
+        return b.len() as u8;
+    }
+    // initialize with all ones
+    let mut prev_hp = vec![1; n];
+    let mut prev_hn = vec![0; n];
+    let mut prev_dp = vec![1; n];
+    //
+    let mut curr_vp = vec![1; n];
+    let mut curr_vn = vec![0; n];
+
+    let mut curr_hp = vec![1; n];
+    let mut curr_hn = vec![0; n];
+    let mut curr_dp = vec![0; n];
+
+    for (i, ca) in a.iter().enumerate() {
+        // not needed actually
+
+        for (j, cb) in b.iter().enumerate() {
+            let is_match = if ca == cb { 1 } else { 0 };
+            if j == 0 {
+                curr_vp[j] = 1;
+                curr_vn[j] = 0;
+            } else {
+                // curr_diag[j - i] = prev_h[ j - 1 ] + curr_v [ j ]
+                let res = curr_dp[j - 1] - (prev_hp[j - 1] - prev_hn[j - 1]);
+                curr_vp[j] = if res > 0 { 1 } else { 0 };
+                curr_vn[j] = if res < 0 { 1 } else { 0 };
+            }
+            // curr_diag[j]
+            let diag_pos = (prev_hn[j] == 0) & (curr_vn[j] == 0) & (is_match == 0);
+            curr_dp[j] = if diag_pos { 1 } else { 0 };
+            {
+                let res = curr_dp[j] - (curr_vp[j] - curr_vn[j]);
+                curr_hp[j] = if res > 0 { 1 } else { 0 };
+                curr_hn[j] = if res < 0 { 1 } else { 0 };
+            }
+        }
+        if i + 1 < a.len() {
+            std::mem::swap(&mut prev_dp, &mut curr_dp);
+            std::mem::swap(&mut prev_hn, &mut curr_hn);
+            std::mem::swap(&mut prev_hp, &mut curr_hp);
+        }
+    }
+
+    println!("prev_hp: {:?}", prev_hp);
+    println!("prev_hn: {:?}", prev_hn);
+    println!("prev_dp: {:?}", prev_dp);
+    println!("curr_dp: {:?}", curr_dp);
+    println!("curr_vp: {:?}", curr_vp);
+    println!("curr_vn: {:?}", curr_vn);
+    println!("curr_hp: {:?}", curr_hp);
+    println!("curr_hn: {:?}", curr_hn);
+
+    let result = (a.len() as i32) + curr_hp.iter().sum::<i32>() - curr_hn.iter().sum::<i32>();
+    result as u8
+}
+
 type U8<const N: usize> = Simd<u8, N>;
 
 #[allow(non_snake_case)]
@@ -186,5 +249,71 @@ fn main() {
         let dist = levenshtein_n_by_8(a_seqs, b_seqs);
         let elapsed = start.elapsed();
         println!("Time elapsed 5: {:?} {:?}", elapsed, dist[0]);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_myers_0_0() {
+        assert_eq!(myers_levenshtein(b"", b""), 0);
+    }
+
+    #[test]
+    fn test_myers_0_1() {
+        assert_eq!(myers_levenshtein(b"", b"a"), 1);
+        assert_eq!(myers_levenshtein(b"a", b""), 1);
+    }
+
+    #[test]
+    fn test_myers_1_1() {
+        assert_eq!(myers_levenshtein(b"a", b"a"), 0);
+        assert_eq!(myers_levenshtein(b"a", b"b"), 1);
+    }
+
+    #[test]
+    fn test_myers_1_2() {
+        assert_eq!(myers_levenshtein(b"a", b"ab"), 1);
+        assert_eq!(myers_levenshtein(b"a", b"bc"), 2);
+    }
+
+    #[test]
+    fn test_myers_2_1() {
+        assert_eq!(myers_levenshtein(b"ab", b"a"), 1);
+        assert_eq!(myers_levenshtein(b"bc", b"a"), 2);
+    }
+
+    #[test]
+    fn test_myers_2_2() {
+        assert_eq!(myers_levenshtein(b"ab", b"ab"), 0);
+        assert_eq!(myers_levenshtein(b"ab", b"ac"), 1);
+        assert_eq!(myers_levenshtein(b"ab", b"bc"), 2);
+        assert_eq!(myers_levenshtein(b"ab", b"cd"), 2);
+    }
+
+    #[test]
+
+    fn test_myers_random_small() {
+        let data: Vec<&'static [u8]> = vec![
+            b"a", b"Z9", b"k3x", b"T", b"q7", b"mN2", b"r", b"8b", b"L0p", b"dx", b"Y", b"w4R",
+            b"3", b"tK", b"p9q", b"H2", b"s", b"Vx1", b"7", b"nB", b"c4", b"J", b"u8m", b"5t",
+            b"g", b"R2d", b"y", b"0", b"eL", b"K9", b"z3Q", b"b", b"M1", b"f8", b"X", b"h2k", b"6",
+            b"dP", b"q", b"9z", b"W4", b"l", b"C7r", b"2", b"vN", b"t", b"8Kx", b"G", b"m5", b"p",
+            b"1aZ", b"r4", b"S", b"y7", b"k", b"D3", b"0x", b"n", b"B8q", b"u", b"4", b"e2R", b"L",
+            b"c9", b"Tm", b"7pQ", b"a", b"Z", b"x3", b"H", b"j8L", b"2k", b"w", b"F5", b"9", b"sD",
+            b"q1", b"U", b"b7", b"6m", b"Y2", b"t", b"K", b"p4X", b"r", b"3d", b"V", b"g8", b"N1c",
+            b"z", b"5R", b"h", b"0Lk", b"M", b"y2", b"C", b"8t", b"f", b"Q7", b"d",
+        ];
+        for a in data.iter() {
+            for b in data.iter() {
+                let a_str = std::str::from_utf8(a).unwrap();
+                let b_str = std::str::from_utf8(b).unwrap();
+                let bitwise = myers_levenshtein(a, b) as i32;
+                let reference = levenshtein(a_str, b_str) as i32;
+                assert_eq!(naive, reference);
+            }
+        }
     }
 }

@@ -86,6 +86,17 @@ def bench_1_to_n(
     return BenchResult(f"1_to_{n}  (strlen={str_len})", py_ms, rs_ms)
 
 
+def bench_1_to_n_simd(
+    n: int, str_len: int, dist_func: Callable[[str, str], int]
+) -> BenchResult:
+    left = random_bytes(str_len)
+    right = [random_bytes(str_len) for _ in range(n)]
+
+    py_ms = _timeit(py_1_to_n, left, right, dist_func)
+    rs_ms = _timeit(rust_levenshtein.compute_levenshtein_1_to_n_bytes_simd, left, right)
+    return BenchResult(f"1_to_{n}  (strlen={str_len})", py_ms, rs_ms)
+
+
 def bench_m_to_n(
     m: int, n: int, str_len: int, dist_func: Callable[[str, str], int]
 ) -> BenchResult:
@@ -98,7 +109,7 @@ def bench_m_to_n(
 
 
 def main(
-    sizes: list[int] = [10, 30],
+    sizes: list[int] = [32, 64],
     str_lens: list[int] = [16, 64, 256],
     baseline: Literal["plain_python", "python_levenshtein"] = "python_levenshtein",
 ):
@@ -116,7 +127,6 @@ def main(
     print(f" rust_levenshtein benchmarks (baseline: {baseline})")
     print("=" * 90)
 
-    # --- 1-to-N ---
     print("\n### compute_levenshtein_1_to_n ###\n")
     for n in sizes:
         for sl in str_lens:
@@ -124,7 +134,13 @@ def main(
             results.append(r)
             print(r)
 
-    # --- M-to-N ---
+    print("\n### compute_levenshtein_1_to_n_simd ###\n")
+    for n in sizes:
+        for sl in str_lens:
+            r = bench_1_to_n_simd(n, sl, dist_func)
+            results.append(r)
+            print(r)
+
     print("\n### compute_levenshtein_m_to_n ###\n")
     for n in sizes:
         for sl in str_lens:

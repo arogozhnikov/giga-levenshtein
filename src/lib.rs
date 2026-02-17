@@ -1,4 +1,8 @@
+#![feature(portable_simd)]
 use pyo3::prelude::*;
+
+mod simd;
+use crate::simd as levenshtein_simd;
 
 /// Compute the Levenshtein distance between two byte slices using a single-row DP approach.
 fn levenshtein_bytes(a: &[u8], b: &[u8]) -> usize {
@@ -42,6 +46,14 @@ fn compute_levenshtein_1_to_n_bytes(left: &[u8], right: Vec<Vec<u8>>) -> Vec<usi
         .collect()
 }
 
+/// Compute Levenshtein distances from one byte slice to a list of byte slices using SIMD.
+#[pyfunction]
+fn compute_levenshtein_1_to_n_bytes_simd(left: &[u8], right: Vec<Vec<u8>>) -> Vec<usize> {
+    let results =
+        levenshtein_simd::levenshtein_n_by_1(right.iter().map(|r| r.as_slice()).collect(), left);
+    results.iter().map(|x| *x as usize).collect()
+}
+
 /// Compute Levenshtein distances from each byte slice in `left` to each byte slice in `right`.
 #[pyfunction]
 fn compute_levenshtein_m_to_n_bytes(left: Vec<Vec<u8>>, right: Vec<Vec<u8>>) -> Vec<Vec<usize>> {
@@ -58,6 +70,7 @@ fn compute_levenshtein_m_to_n_bytes(left: Vec<Vec<u8>>, right: Vec<Vec<u8>>) -> 
 #[pymodule]
 fn rust_levenshtein(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compute_levenshtein_1_to_n_bytes, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_levenshtein_1_to_n_bytes_simd, m)?)?;
     m.add_function(wrap_pyfunction!(compute_levenshtein_m_to_n_bytes, m)?)?;
     Ok(())
 }

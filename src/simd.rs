@@ -76,17 +76,20 @@ fn bitty_levenshtein(a: &[u8], b: &[u8]) -> u8 {
 
 type U8<const N: usize> = Simd<u8, N>;
 
-fn bitty_levenshtein_simd_by_1<const N: usize>(a: &[&[u8]; N], b: &[u8]) -> [u8; N] {
+fn bitty_levenshtein_simd_by_1<const N: usize, const M: usize>(
+    a: &[&[u8]; M],
+    b: &[u8],
+) -> [u8; M] {
     // assumes all lengths are identical, not checked right now
     let (alen, blen) = (a[0].len(), b.len());
     // myers-style algo
     if blen == 0 {
-        return [alen as u8; N];
+        return [alen as u8; M];
     };
     if alen == 0 {
-        return [blen as u8; N];
+        return [blen as u8; M];
     }
-    assert!(N == N); // something we'll change later
+    assert!(N * 8 == M);
 
     let mut prev_hp = vec![U8::<N>::splat(255); blen];
     let mut prev_hn = vec![U8::<N>::splat(0); blen];
@@ -98,12 +101,17 @@ fn bitty_levenshtein_simd_by_1<const N: usize>(a: &[&[u8]; N], b: &[u8]) -> [u8;
         // not needed actually
         let mut curr_dp_j = U8::<N>::splat(0);
 
-        let c_a = U8::<N>::from_array(std::array::from_fn(|s| a[s][i] as u8));
+        let c_a: [U8<N>; 8] = std::array::from_fn(|shift| {
+            U8::<N>::from_array(std::array::from_fn(|s| a[shift + 8 * s][i] as u8))
+        });
 
         for (j, cb) in b.iter().enumerate() {
-            let is_match = c_a
-                .simd_eq(U8::<N>::splat(*cb))
-                .select(U8::<N>::splat(255), U8::<N>::splat(0));
+            let mut is_match = U8::<N>::splat(0);
+            for shift in 0..8 {
+                is_match |= c_a[shift]
+                    .simd_eq(U8::<N>::splat(*cb))
+                    .select(U8::<N>::splat(1 << shift), U8::<N>::splat(0));
+            }
             let curr_vp_j: U8<N>;
             let curr_vn_j: U8<N>;
             if j == 0 {
@@ -132,16 +140,18 @@ fn bitty_levenshtein_simd_by_1<const N: usize>(a: &[&[u8]; N], b: &[u8]) -> [u8;
     }
 
     let one = U8::<N>::splat(1);
+    let mut result = [0u8; M];
+    for shift in 0..8 {
+        let result_for_shift: U8<N> = U8::<N>::splat(alen as u8)
+            + curr_hp.iter().map(|x| (*x >> shift) & one).sum::<U8<N>>()
+            - curr_hn.iter().map(|x| (*x >> shift) & one).sum::<U8<N>>();
 
-    for j in 0..blen {
-        curr_hp[j] = curr_hp[j] & one;
-        curr_hn[j] = curr_hn[j] & one;
+        for s in 0..N {
+            result[shift as usize + s * 8] = result_for_shift[s];
+        }
     }
 
-    let result: U8<N> =
-        U8::<N>::splat(alen as u8) + curr_hp.iter().sum::<U8<N>>() - curr_hn.iter().sum::<U8<N>>();
-    let res2: [u8; N] = *result.as_array();
-    res2
+    result
 }
 
 #[allow(non_snake_case)]
@@ -375,13 +385,20 @@ mod tests {
 
     #[test]
     fn test_bitty_simd_1_to_n() {
+        let consts: [&[u8]; 5] = [b"", b" ", b"  ", b"   ", b"    "];
         for a in TEST_SEQS.iter() {
             for b in TEST_SEQS.iter() {
                 let a_str = std::str::from_utf8(a).unwrap();
                 let b_str = std::str::from_utf8(b).unwrap();
-                let bitwise_result = bitty_levenshtein_simd_by_1(&[*a; 8], b)[0] as i32;
-                let reference = levenshtein(a_str, b_str) as i32;
-                assert_eq!(bitwise_result, reference, "{} {}", a_str, b_str);
+                let input: [&[u8]; 256] =
+                    array::from_fn(|s| if s % 3 != 0 { *a } else { consts[(*a).len()] });
+
+                let bitwise_results = bitty_levenshtein_simd_by_1::<32, 256>(&input, b);
+                for (i, res) in bitwise_results.into_iter().enumerate() {
+                    let reference =
+                        levenshtein(std::str::from_utf8(input[i]).unwrap(), b_str) as i32;
+                    assert_eq!(res as i32, reference, "{} {} {}", a_str, b_str, i);
+                }
             }
         }
     }

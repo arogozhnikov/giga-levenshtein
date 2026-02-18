@@ -1,5 +1,4 @@
 use std::array;
-use std::simd::Mask;
 
 use std::simd::cmp::SimdOrd;
 use std::simd::cmp::SimdPartialEq;
@@ -34,35 +33,34 @@ fn bitty_levenshtein(a: &[u8], b: &[u8]) -> u8 {
     let mut prev_hp = vec![true; n];
     let mut prev_hn = vec![false; n];
     //
-    let mut curr_vp = vec![true; n];
-    let mut curr_vn = vec![false; n];
-    //
     let mut curr_hp = vec![true; n];
     let mut curr_hn = vec![false; n];
-    let mut curr_dp = vec![false; n];
 
     for (i, ca) in a.iter().enumerate() {
         // not needed actually
+        let mut curr_dp_j = false;
 
         for (j, cb) in b.iter().enumerate() {
             let is_match = ca == cb;
+            let curr_vp_j: bool;
+            let curr_vn_j: bool;
             if j == 0 {
-                curr_vp[j] = true;
-                curr_vn[j] = false;
+                curr_vp_j = true;
+                curr_vn_j = false;
             } else {
                 // curr_d[j - i] = prev_h[ j - 1 ] + curr_v [ j ]
                 // res := curr_dp[j - 1] - prev_hp[j - 1] + prev_hn[j - 1];
-                curr_vp[j] = prev_hn[j - 1] | (curr_dp[j - 1] & !prev_hp[j - 1]); // res > 0
-                curr_vn[j] = prev_hp[j - 1] & !curr_dp[j - 1]; // res < 0
+                let curr_dp_j_m1 = curr_dp_j;
+                curr_vp_j = prev_hn[j - 1] | (curr_dp_j_m1 & !prev_hp[j - 1]); // res > 0
+                curr_vn_j = prev_hp[j - 1] & !curr_dp_j_m1; // res < 0
             }
-            // curr_d[j]
-            let diag_pos = !(prev_hn[j] | curr_vn[j] | is_match);
-            curr_dp[j] = diag_pos;
+            // curr_d[j], before we used previous variable
+            curr_dp_j = !(prev_hn[j] | curr_vn_j | is_match);
             {
                 // curr_h[j] = curr_d[j] - curr_v[j]
                 // res := curr_dp[j] - curr_vp[j] + curr_vn[j];
-                curr_hp[j] = curr_dp[j] & !curr_vp[j]; // res > 0
-                curr_hn[j] = curr_vp[j] & !curr_dp[j]; // res < 0
+                curr_hp[j] = curr_dp_j & !curr_vp_j; // res > 0
+                curr_hn[j] = curr_vp_j & !curr_dp_j; // res < 0
             }
         }
         if i + 1 < a.len() {
@@ -77,6 +75,31 @@ fn bitty_levenshtein(a: &[u8], b: &[u8]) -> u8 {
 }
 
 type U8<const N: usize> = Simd<u8, N>;
+
+// fn bitty_levenshtein_simd_by_1<const N: usize>(a: &[&[u8]; N * 8], b: &[u8]) -> [u8; N * 8] {
+//     // assumes all lengths are identical, not checked right now
+
+//     let (ilim, jlim) = (a[0].len(), b.len());
+//     let mut prev: Vec<U8<N>> = (0..=J).map(|i| U8::<N>::splat(i as u8)).collect();
+//     let mut curr = vec![U8::<N>::splat(0); J + 1];
+//     let one = U8::<N>::splat(1);
+
+//     for i in 1..=I {
+//         curr[0] = U8::<N>::splat(i as u8);
+
+//         let c_a = U8::<N>::from_array(std::array::from_fn(|s| a[s][i - 1] as u8));
+
+//         for j in 1..=J {
+//             let mask = c_a.simd_eq(U8::<N>::splat(b[j - 1]));
+
+//             curr[j] = (mask.select(prev[j - 1], prev[j - 1] + one))
+//                 .simd_min(prev[j] + one)
+//                 .simd_min(curr[j - 1] + one)
+//         }
+//         std::mem::swap(&mut prev, &mut curr);
+//     }
+//     return *prev[J].as_array();
+// }
 
 #[allow(non_snake_case)]
 fn levenshtein_simd_by_1<const N: usize>(a: &[&[u8]; N], b: &[u8]) -> [u8; N] {

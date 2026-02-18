@@ -1,7 +1,6 @@
 use std::array;
 use std::simd::cmp::SimdOrd;
 use std::simd::cmp::SimdPartialEq;
-use std::simd::Mask;
 use std::simd::{Select, Simd};
 use std::time::Instant;
 
@@ -99,7 +98,7 @@ pub fn bitty_levenshtein_simd_by_1<const N: usize, const M: usize>(
 
     for i in 0..alen {
         // not needed actually
-        let mut curr_dp_j = U8::<N>::splat(0);
+        let mut curr_dnp_j = U8::<N>::splat(255);
 
         let c_a: [U8<N>; 8] = std::array::from_fn(|shift| {
             U8::<N>::from_array(std::array::from_fn(|s| a[shift + 8 * s][i] as u8))
@@ -120,17 +119,17 @@ pub fn bitty_levenshtein_simd_by_1<const N: usize, const M: usize>(
             } else {
                 // curr_d[j - i] = prev_h[ j - 1 ] + curr_v [ j ]
                 // res := curr_dp[j - 1] - prev_hp[j - 1] + prev_hn[j - 1];
-                let curr_dp_j_m1 = curr_dp_j;
-                curr_vp_j = prev_hn[j - 1] | (curr_dp_j_m1 & !prev_hp[j - 1]); // res > 0
-                curr_vn_j = prev_hp[j - 1] & !curr_dp_j_m1; // res < 0
+                let curr_dnp_j_m1 = curr_dnp_j;
+                curr_vp_j = prev_hn[j - 1] | !(curr_dnp_j_m1 | prev_hp[j - 1]); // res > 0
+                curr_vn_j = prev_hp[j - 1] & curr_dnp_j_m1; // res < 0
             }
             // curr_d[j], before we used previous variable
-            curr_dp_j = !(prev_hn[j] | curr_vn_j | is_match);
+            curr_dnp_j = prev_hn[j] | curr_vn_j | is_match;
             {
                 // curr_h[j] = curr_d[j] - curr_v[j]
                 // res := curr_dp[j] - curr_vp[j] + curr_vn[j];
-                curr_hp[j] = (curr_dp_j & !curr_vp_j) | curr_vn_j; // res > 0
-                curr_hn[j] = curr_vp_j & !curr_dp_j; // res < 0
+                curr_hp[j] = !(curr_dnp_j | curr_vp_j) | curr_vn_j; // res > 0
+                curr_hn[j] = curr_vp_j & curr_dnp_j; // res < 0
             }
         }
         if i + 1 < alen {
@@ -198,12 +197,12 @@ pub fn levenshtein_n_by_1(a: Vec<&[u8]>, b: &[u8]) -> Vec<u8> {
 
 pub fn bitty_levenshtein_n_by_1(a: Vec<&[u8]>, b: &[u8]) -> Vec<u8> {
     assert!(!b.contains(&255));
-    a.chunks(256)
+    a.chunks(128)
         .flat_map(|chunk| {
-            if chunk.len() == 256 {
-                bitty_levenshtein_simd_by_1::<32, 256>(chunk.try_into().unwrap(), b).to_vec()
+            if chunk.len() == 128 {
+                bitty_levenshtein_simd_by_1::<16, 128>(chunk.try_into().unwrap(), b).to_vec()
             } else {
-                panic!("chunk len is not 256");
+                panic!("chunk len is not 128");
             }
         })
         .collect()

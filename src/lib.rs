@@ -54,6 +54,16 @@ fn compute_levenshtein_1_to_n_bytes_simd(left: &[u8], right: Vec<Vec<u8>>) -> Ve
     results.iter().map(|x| *x as usize).collect()
 }
 
+/// Compute Levenshtein distances from one byte slice to a list of byte slices using Bitty SIMD.
+#[pyfunction]
+fn compute_levenshtein_1_to_n_bytes_bitty_simd(left: &[u8], right: Vec<Vec<u8>>) -> Vec<usize> {
+    let results = levenshtein_simd::bitty_levenshtein_n_by_1(
+        right.iter().map(|r| r.as_slice()).collect(),
+        left,
+    );
+    results.iter().map(|x| *x as usize).collect()
+}
+
 /// Compute Levenshtein distances from each byte slice in `left` to each byte slice in `right`.
 #[pyfunction]
 fn compute_levenshtein_m_to_n_bytes(left: Vec<Vec<u8>>, right: Vec<Vec<u8>>) -> Vec<Vec<usize>> {
@@ -71,6 +81,10 @@ fn compute_levenshtein_m_to_n_bytes(left: Vec<Vec<u8>>, right: Vec<Vec<u8>>) -> 
 fn rust_levenshtein(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compute_levenshtein_1_to_n_bytes, m)?)?;
     m.add_function(wrap_pyfunction!(compute_levenshtein_1_to_n_bytes_simd, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        compute_levenshtein_1_to_n_bytes_bitty_simd,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(compute_levenshtein_m_to_n_bytes, m)?)?;
     Ok(())
 }

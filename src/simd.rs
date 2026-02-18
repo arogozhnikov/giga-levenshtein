@@ -76,7 +76,7 @@ fn bitty_levenshtein(a: &[u8], b: &[u8]) -> u8 {
 
 type U8<const N: usize> = Simd<u8, N>;
 
-fn bitty_levenshtein_simd_by_1<const N: usize, const M: usize>(
+pub fn bitty_levenshtein_simd_by_1<const N: usize, const M: usize>(
     a: &[&[u8]; M],
     b: &[u8],
 ) -> [u8; M] {
@@ -191,6 +191,19 @@ pub fn levenshtein_n_by_1(a: Vec<&[u8]>, b: &[u8]) -> Vec<u8> {
                 levenshtein_simd_by_1::<32>(chunk.try_into().unwrap(), b).to_vec()
             } else {
                 panic!("chunk len is not 32");
+            }
+        })
+        .collect()
+}
+
+pub fn bitty_levenshtein_n_by_1(a: Vec<&[u8]>, b: &[u8]) -> Vec<u8> {
+    assert!(!b.contains(&255));
+    a.chunks(256)
+        .flat_map(|chunk| {
+            if chunk.len() == 256 {
+                bitty_levenshtein_simd_by_1::<32, 256>(chunk.try_into().unwrap(), b).to_vec()
+            } else {
+                panic!("chunk len is not 256");
             }
         })
         .collect()
@@ -391,7 +404,7 @@ mod tests {
                 let a_str = std::str::from_utf8(a).unwrap();
                 let b_str = std::str::from_utf8(b).unwrap();
                 let input: [&[u8]; 256] =
-                    array::from_fn(|s| if s % 3 != 0 { *a } else { consts[(*a).len()] });
+                    array::from_fn(|s| if s % 13 != 0 { *a } else { consts[(*a).len()] });
 
                 let bitwise_results = bitty_levenshtein_simd_by_1::<32, 256>(&input, b);
                 for (i, res) in bitwise_results.into_iter().enumerate() {

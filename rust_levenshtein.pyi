@@ -2,6 +2,9 @@ def compute_levenshtein_1_to_n_bytes(left: bytes, right: list[bytes]) -> list[in
 def compute_levenshtein_1_to_n_bytes_simd(
     left: bytes, right: list[bytes]
 ) -> list[int]: ...
+def compute_levenshtein_1_to_n_bytes_bitty_simd(
+    left: bytes, right: list[bytes]
+) -> list[int]: ...
 def compute_levenshtein_m_to_n_bytes(
     left: list[bytes], right: list[bytes]
 ) -> list[list[int]]: ...

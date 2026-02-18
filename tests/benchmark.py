@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import rust_levenshtein
 
 
-def _myers_py_levenshtein(a: bytes, b: bytes) -> int:
+def _bitty_py_levenshtein(a: bytes, b: bytes) -> int:
     m, n = len(a), len(b)
     if m == 0:
         return n
@@ -114,7 +114,7 @@ def main(
     baseline: Literal["plain_python", "python_levenshtein"] = "python_levenshtein",
 ):
     if baseline == "plain_python":
-        dist_func = _myers_py_levenshtein
+        dist_func = _bitty_py_levenshtein
     else:
         import Levenshtein
 

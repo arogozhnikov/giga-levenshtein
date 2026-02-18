@@ -97,6 +97,21 @@ def bench_1_to_n_simd(
     return BenchResult(f"1_to_{n}  (strlen={str_len})", py_ms, rs_ms)
 
 
+def bench_1_to_n_bitty_simd(
+    n: int, str_len: int, dist_func: Callable[[str, str], int]
+) -> BenchResult:
+    left = random_bytes(str_len)
+    # n must be a multiple of 128 for bitty_simd
+    n = (n // -128) * -128
+    right = [random_bytes(str_len) for _ in range(n)]
+
+    py_ms = _timeit(py_1_to_n, left, right, dist_func)
+    rs_ms = _timeit(
+        rust_levenshtein.compute_levenshtein_1_to_n_bytes_bitty_simd, left, right
+    )
+    return BenchResult(f"1_to_{n}  (strlen={str_len})", py_ms, rs_ms)
+
+
 def bench_m_to_n(
     m: int, n: int, str_len: int, dist_func: Callable[[str, str], int]
 ) -> BenchResult:
@@ -138,6 +153,15 @@ def main(
     for n in sizes:
         for sl in str_lens:
             r = bench_1_to_n_simd(n, sl, dist_func)
+            results.append(r)
+            print(r)
+
+    print("\n### compute_levenshtein_1_to_n_bitty_simd ###\n")
+    # bitty_simd requires multiples of 128
+    bitty_sizes = [128, 256]
+    for n in bitty_sizes:
+        for sl in str_lens:
+            r = bench_1_to_n_bitty_simd(n, sl, dist_func)
             results.append(r)
             print(r)
 

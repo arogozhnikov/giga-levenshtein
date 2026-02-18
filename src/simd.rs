@@ -59,7 +59,7 @@ fn bitty_levenshtein(a: &[u8], b: &[u8]) -> u8 {
             {
                 // curr_h[j] = curr_d[j] - curr_v[j]
                 // res := curr_dp[j] - curr_vp[j] + curr_vn[j];
-                curr_hp[j] = curr_dp_j & !curr_vp_j; // res > 0
+                curr_hp[j] = (curr_dp_j & !curr_vp_j) | curr_vn_j; // res > 0
                 curr_hn[j] = curr_vp_j & !curr_dp_j; // res < 0
             }
         }

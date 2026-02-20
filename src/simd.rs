@@ -4,7 +4,7 @@ use std::simd::cmp::SimdPartialEq;
 use std::simd::{Select, Simd};
 use std::time::Instant;
 
-fn levenshtein(a: &str, b: &str) -> usize {
+fn _levenshtein(a: &str, b: &str) -> usize {
     let n = b.len();
     let mut prev = (0..=n).collect::<Vec<_>>();
     let mut curr = vec![0; n + 1];
@@ -19,7 +19,7 @@ fn levenshtein(a: &str, b: &str) -> usize {
     prev[n]
 }
 
-fn bitty_levenshtein(a: &[u8], b: &[u8]) -> u8 {
+fn _bitty_levenshtein(a: &[u8], b: &[u8]) -> u8 {
     // myers-style algo
     if b.len() == 0 {
         return a.len() as u8;
@@ -27,16 +27,14 @@ fn bitty_levenshtein(a: &[u8], b: &[u8]) -> u8 {
     if a.len() == 0 {
         return b.len() as u8;
     }
-    // initialize with all ones
     let n = b.len();
-    let mut prev_hp = vec![true; n];
+    let mut prev_hp = vec![true; n]; // all 1
     let mut prev_hn = vec![false; n];
     //
     let mut curr_hp = vec![true; n];
     let mut curr_hn = vec![false; n];
 
     for (i, ca) in a.iter().enumerate() {
-        // not needed actually
         let mut curr_dp_j = false;
 
         for (j, cb) in b.iter().enumerate() {
@@ -79,9 +77,9 @@ pub fn bitty_levenshtein_simd_by_1<const N: usize, const M: usize>(
     a: &[&[u8]; M],
     b: &[u8],
 ) -> [u8; M] {
-    // assumes all lengths are identical, not checked right now
+    // assumes all lengths are identical, does not check this right now
     let (alen, blen) = (a[0].len(), b.len());
-    // myers-style algo
+
     if blen == 0 {
         return [alen as u8; M];
     };
@@ -90,6 +88,7 @@ pub fn bitty_levenshtein_simd_by_1<const N: usize, const M: usize>(
     }
     assert!(N * 8 == M);
 
+    // myers-style algo
     let mut prev_hp = vec![U8::<N>::splat(255); blen];
     let mut prev_hn = vec![U8::<N>::splat(0); blen];
     //
@@ -97,7 +96,6 @@ pub fn bitty_levenshtein_simd_by_1<const N: usize, const M: usize>(
     let mut curr_hn = vec![U8::<N>::splat(0); blen];
 
     for i in 0..alen {
-        // not needed actually
         let mut curr_dnp_j = U8::<N>::splat(255);
 
         let c_a: [U8<N>; 8] = std::array::from_fn(|shift| {
@@ -208,26 +206,27 @@ pub fn bitty_levenshtein_n_by_1(a: Vec<&[u8]>, b: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-#[allow(non_snake_case)]
 fn levenshtein_n_by_8<const N: usize>(a: [&[u8]; N], b: [&[u8]; 8]) -> [u8; N] {
-    let (I, J) = (a[0].len(), b.len());
+    let (alen, blen) = (a[0].len(), b.len());
     // TODO init is totally bad, dx=+1, dy=?
-    let mut prev: Vec<U8<N>> = (0..4 * (J + 1)).map(|i| U8::<N>::splat(i as u8)).collect();
-    let mut curr = vec![U8::<N>::splat(0); 4 * (J + 1)];
+    let mut prev: Vec<U8<N>> = (0..4 * (blen + 1))
+        .map(|i| U8::<N>::splat(i as u8))
+        .collect();
+    let mut curr = vec![U8::<N>::splat(0); 4 * (blen + 1)];
 
     let mut bit_shifts: Vec<U8<N>> = vec![]; // 1 for each mismatch
 
     let one = U8::<N>::splat(1);
     let zeroes = U8::<N>::splat(0);
 
-    for i in 1..=I {
+    for i in 1..=alen {
         let mut is_same = zeroes;
         let c_a = U8::<N>::from_array(std::array::from_fn(|s| a[s][i - 1] as u8));
 
         let mut dy_p = one;
         let mut dy_n = zeroes;
 
-        for j in 1..=J {
+        for j in 1..=blen {
             for shift in 0..8 {
                 is_same = is_same << 1;
                 is_same = c_a
@@ -245,41 +244,39 @@ fn levenshtein_n_by_8<const N: usize>(a: [&[u8]; N], b: [&[u8]; 8]) -> [u8; N] {
             if j == i {
                 bit_shifts.push(diag0);
             }
-            if j >= I {
+            if j >= alen {
                 bit_shifts.push(dy_p);
             }
         }
         std::mem::swap(&mut prev, &mut curr);
     }
-    // TODO put somewhere the last condition.
 
-    return *prev[J].as_array();
+    return *prev[blen].as_array();
 }
 
-fn compute_sum<const N: usize>(a: &[U8<N>]) -> [u16; N] {
-    let mut counters: [Simd<u8, N>; 8] = array::from_fn(|_| U8::<N>::splat(0));
-    let mask = Simd::<u8, N>::splat(1);
-    let mut result: [u16; N] = std::array::from_fn(|_i| 0u16);
+// fn compute_sum<const N: usize>(a: &[U8<N>]) -> [u16; N] {
+//     let mut counters: [Simd<u8, N>; 8] = array::from_fn(|_| U8::<N>::splat(0));
+//     let mask = Simd::<u8, N>::splat(1);
+//     let mut result: [u16; N] = std::array::from_fn(|_i| 0u16);
 
-    for i in 0..a.len() {
-        let item = a[i];
-        for i in 0..8 {
-            counters[i] += (item >> (i as u8)) & mask;
-        }
-        if (i % 128 == 0) || (i + 1 == a.len()) {
-            for i in 0..N {
-                result[i * 8..(i + 1) * N]
-                    .iter_mut()
-                    .zip(&counters[i].to_array())
-                    .for_each(|(x, y)| *x += *y as u16);
-            }
-            counters = array::from_fn(|_| U8::<N>::splat(0)); // reset
-        }
-    }
-    // dump rest of counters to result
-
-    return result;
-}
+//     for i in 0..a.len() {
+//         let item = a[i];
+//         for i in 0..8 {
+//             counters[i] += (item >> (i as u8)) & mask;
+//         }
+//         if (i % 128 == 0) || (i + 1 == a.len()) {
+//             for i in 0..N {
+//                 result[i * 8..(i + 1) * N]
+//                     .iter_mut()
+//                     .zip(&counters[i].to_array())
+//                     .for_each(|(x, y)| *x += *y as u16);
+//             }
+//             counters = array::from_fn(|_| U8::<N>::splat(0)); // reset
+//         }
+//     }
+//     // dump rest of counters to result
+//     return result;
+// }
 
 fn main() {
     let a = "abcd1234".repeat(1024 / 8);
@@ -288,7 +285,7 @@ fn main() {
 
     for _i in 0..3 {
         let start = Instant::now();
-        let dist = levenshtein(&a, &b);
+        let dist = _levenshtein(&a, &b);
         let elapsed = start.elapsed();
         println!("Time elapsed 1: {:?} {:?}", elapsed, dist);
 
@@ -347,56 +344,56 @@ mod tests {
 
     #[test]
     fn test_bitty_0_0() {
-        assert_eq!(bitty_levenshtein(b"", b""), 0);
+        assert_eq!(_bitty_levenshtein(b"", b""), 0);
     }
 
     #[test]
     fn test_bitty_0_1() {
-        assert_eq!(bitty_levenshtein(b"", b"a"), 1);
-        assert_eq!(bitty_levenshtein(b"a", b""), 1);
+        assert_eq!(_bitty_levenshtein(b"", b"a"), 1);
+        assert_eq!(_bitty_levenshtein(b"a", b""), 1);
     }
 
     #[test]
     fn test_bitty_1_1() {
-        assert_eq!(bitty_levenshtein(b"a", b"a"), 0);
-        assert_eq!(bitty_levenshtein(b"a", b"b"), 1);
+        assert_eq!(_bitty_levenshtein(b"a", b"a"), 0);
+        assert_eq!(_bitty_levenshtein(b"a", b"b"), 1);
     }
 
     #[test]
     fn test_bitty_1_2() {
-        assert_eq!(bitty_levenshtein(b"a", b"ab"), 1);
-        assert_eq!(bitty_levenshtein(b"a", b"bc"), 2);
+        assert_eq!(_bitty_levenshtein(b"a", b"ab"), 1);
+        assert_eq!(_bitty_levenshtein(b"a", b"bc"), 2);
     }
 
     #[test]
     fn test_bitty_2_1() {
-        assert_eq!(bitty_levenshtein(b"ab", b"a"), 1);
-        assert_eq!(bitty_levenshtein(b"bc", b"a"), 2);
+        assert_eq!(_bitty_levenshtein(b"ab", b"a"), 1);
+        assert_eq!(_bitty_levenshtein(b"bc", b"a"), 2);
     }
 
     #[test]
     fn test_bitty_2_2() {
-        assert_eq!(bitty_levenshtein(b"ab", b"ab"), 0);
-        assert_eq!(bitty_levenshtein(b"ab", b"ac"), 1);
-        assert_eq!(bitty_levenshtein(b"ab", b"bc"), 2);
-        assert_eq!(bitty_levenshtein(b"ab", b"cd"), 2);
+        assert_eq!(_bitty_levenshtein(b"ab", b"ab"), 0);
+        assert_eq!(_bitty_levenshtein(b"ab", b"ac"), 1);
+        assert_eq!(_bitty_levenshtein(b"ab", b"bc"), 2);
+        assert_eq!(_bitty_levenshtein(b"ab", b"cd"), 2);
     }
 
     #[test]
-    fn test_bitty_random_small() {
+    fn stress_test_bitty() {
         for a in TEST_SEQS.iter() {
             for b in TEST_SEQS.iter() {
                 let a_str = std::str::from_utf8(a).unwrap();
                 let b_str = std::str::from_utf8(b).unwrap();
-                let bitwise_result = bitty_levenshtein(a, b) as i32;
-                let reference = levenshtein(a_str, b_str) as i32;
+                let bitwise_result = _bitty_levenshtein(a, b) as i32;
+                let reference = _levenshtein(a_str, b_str) as i32;
                 assert_eq!(bitwise_result, reference);
             }
         }
     }
 
     #[test]
-    fn test_bitty_simd_1_to_n() {
+    fn stress_test_bitty_simd_1_to_n() {
         let consts: [&[u8]; 5] = [b"", b" ", b"  ", b"   ", b"    "];
         for a in TEST_SEQS.iter() {
             for b in TEST_SEQS.iter() {
@@ -408,7 +405,7 @@ mod tests {
                 let bitwise_results = bitty_levenshtein_simd_by_1::<32, 256>(&input, b);
                 for (i, res) in bitwise_results.into_iter().enumerate() {
                     let reference =
-                        levenshtein(std::str::from_utf8(input[i]).unwrap(), b_str) as i32;
+                        _levenshtein(std::str::from_utf8(input[i]).unwrap(), b_str) as i32;
                     assert_eq!(res as i32, reference, "{} {} {}", a_str, b_str, i);
                 }
             }

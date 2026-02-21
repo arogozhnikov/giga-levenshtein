@@ -331,15 +331,13 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    const TEST_SEQS: [&'static [u8]; 100] = [
-        b"a", b"Z9", b"k3x", b"T", b"q7", b"mN2", b"r", b"8b", b"L0p", b"dx", b"Y", b"w4R", b"3",
-        b"tK", b"p9q", b"H2", b"s", b"Vx1", b"7", b"nB", b"c4", b"J", b"u8m", b"5t", b"g", b"R2d",
-        b"y", b"0", b"eL", b"K9", b"z3Q", b"b", b"M1", b"f8", b"X", b"h2k", b"6", b"dP", b"q",
-        b"9z", b"W4", b"l", b"C7r", b"2", b"vN", b"t", b"8Kx", b"G", b"m5", b"p", b"1aZ", b"r4",
-        b"S", b"y7", b"k", b"D3", b"0x", b"n", b"B8q", b"u", b"4", b"e2R", b"L", b"c9", b"Tm",
-        b"7pQ", b"a", b"Z", b"x3", b"H", b"j8L", b"2k", b"w", b"F5", b"9", b"sD", b"q1", b"U",
-        b"b7", b"6m", b"Y2", b"t", b"K", b"p4X", b"r", b"3d", b"V", b"g8", b"N1c", b"z", b"5R",
-        b"h", b"0Lk", b"M", b"y2", b"C", b"8t", b"f", b"Q7", b"d",
+    const TEST_SEQS: [&'static [u8]; 67] = [
+        b"a", b"aa", b"aaa", b"aaaa", b"ab", b"aab", b"bab", b"abab", b"baba", b"Z9", b"k3x", b"T",
+        b"q7", b"mN2", b"r", b"8b", b"L0p", b"dx", b"Y", b"w4R", b"3", b"tK", b"p9q", b"H2", b"s",
+        b"Vx1", b"7", b"nB", b"c4", b"J", b"u8m", b"5t", b"g", b"R2d", b"y", b"0", b"eL", b"K9",
+        b"z3Q", b"b", b"M1", b"f8", b"X", b"h2k", b"6", b"dP", b"q", b"9z", b"W4", b"l", b"C7r",
+        b"2", b"vN", b"t", b"8Kx", b"G", b"m5", b"p", b"1aZ", b"r4", b"S", b"y7", b"k", b"D3",
+        b"0x", b"n", b"B8q",
     ];
 
     #[test]

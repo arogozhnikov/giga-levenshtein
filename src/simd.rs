@@ -151,6 +151,129 @@ pub fn bitty_levenshtein_simd_by_1<const N: usize, const M: usize>(
     result
 }
 
+pub fn bitty_levenshtein_simd_by_1_limited<const N: usize, const M: usize>(
+    a: &[&[u8]; M],
+    b: &[u8],
+    max_dist: usize,
+) -> [u8; M] {
+    // assumes all lengths are identical, does not check this right now
+    let (alen, blen) = (a[0].len(), b.len());
+    assert!(max_dist <= 254);
+    if (alen + max_dist < blen) || (blen + max_dist < alen) {
+        return [(max_dist + 1) as u8; M];
+    }
+
+    if blen == 0 {
+        return [alen as u8; M];
+    };
+    if alen == 0 {
+        return [blen as u8; M];
+    }
+    assert!(N * 8 == M);
+
+    // myers-style algo
+    let mut diags = vec![U8::<N>::splat(0); blen];
+    //
+    let mut prev_hp = vec![U8::<N>::splat(255); blen];
+    let mut prev_hn = vec![U8::<N>::splat(0); blen];
+    //
+    let mut curr_hp = vec![U8::<N>::splat(255); blen];
+    let mut curr_hn = vec![U8::<N>::splat(0); blen];
+
+    let mut start_penalty = 0u8;
+    let mut last_lo = 1000;
+
+    for i in 0..alen {
+        let mut curr_dnp_j;
+
+        let c_a: [U8<N>; 8] = std::array::from_fn(|shift| {
+            U8::<N>::from_array(std::array::from_fn(|s| a[shift + 8 * s][i] as u8))
+        });
+
+        let lo = i.saturating_sub(max_dist);
+        let hi = (i + max_dist + 1).min(blen);
+        if lo == 0 {
+            start_penalty = i as u8;
+        }
+        last_lo = lo;
+        {
+            let j = lo;
+            let b_j = U8::<N>::splat(b[j]);
+            let mut is_match = U8::<N>::splat(0);
+            for shift in 0..8 {
+                is_match |= c_a[shift]
+                    .simd_eq(b_j)
+                    .select(U8::<N>::splat(1 << shift), U8::<N>::splat(0));
+            }
+
+            // curr_d[j], before we used previous variable
+            curr_dnp_j = prev_hn[j] | is_match;
+            {
+                // curr_h[j] = curr_d[j] - curr_v[j]
+                // res := curr_dp[j] - curr_vp[j] + curr_vn[j];
+                curr_hp[j] = U8::<N>::splat(0); // res > 0
+                curr_hn[j] = curr_dnp_j; // res < 0
+            }
+
+            diags[j] = !curr_dnp_j;
+        }
+
+        for j in lo + 1..hi {
+            let b_j = U8::<N>::splat(b[j]);
+            let mut is_match = U8::<N>::splat(0);
+            for shift in 0..8 {
+                is_match |= c_a[shift]
+                    .simd_eq(b_j)
+                    .select(U8::<N>::splat(1 << shift), U8::<N>::splat(0));
+            }
+            // curr_d[j - i] = prev_h[ j - 1 ] + curr_v [ j ]
+            // res := curr_dp[j - 1] - prev_hp[j - 1] + prev_hn[j - 1];
+            let curr_dnp_j_m1 = curr_dnp_j;
+            let curr_vp_j = prev_hn[j - 1] | !(curr_dnp_j_m1 | prev_hp[j - 1]); // res > 0
+            let curr_vn_j = prev_hp[j - 1] & curr_dnp_j_m1; // res < 0
+
+            // curr_d[j], before we used previous variable
+            curr_dnp_j = prev_hn[j] | curr_vn_j | is_match;
+            {
+                // curr_h[j] = curr_d[j] - curr_v[j]
+                // res := curr_dp[j] - curr_vp[j] + curr_vn[j];
+                curr_hp[j] = !(curr_dnp_j | curr_vp_j) | curr_vn_j; // res > 0
+                curr_hn[j] = curr_vp_j & curr_dnp_j; // res < 0
+            }
+        }
+        if i + 1 < alen {
+            std::mem::swap(&mut prev_hn, &mut curr_hn);
+            std::mem::swap(&mut prev_hp, &mut curr_hp);
+        }
+    }
+
+    let one = U8::<N>::splat(1);
+    let mut result = [0u8; M];
+    let maxval = (max_dist + 1) as u8;
+
+    for shift in 0..8 {
+        let result_for_shift: U8<N> = U8::<N>::splat(start_penalty)
+            + diags[..last_lo + 1]
+                .iter()
+                .map(|x| (*x >> shift) & one)
+                .sum::<U8<N>>()
+            + curr_hp[last_lo + 1..]
+                .iter()
+                .map(|x| (*x >> shift) & one)
+                .sum::<U8<N>>()
+            - curr_hn[last_lo + 1..]
+                .iter()
+                .map(|x| (*x >> shift) & one)
+                .sum::<U8<N>>();
+
+        for s in 0..N {
+            result[shift as usize + s * 8] = result_for_shift[s].min(maxval);
+        }
+    }
+
+    result
+}
+
 #[allow(non_snake_case)]
 fn levenshtein_simd_by_1<const N: usize>(a: &[&[u8]; N], b: &[u8]) -> [u8; N] {
     // assumes all lengths are identical, not checked right now
@@ -405,6 +528,44 @@ mod tests {
                     let reference =
                         _levenshtein(std::str::from_utf8(input[i]).unwrap(), b_str) as i32;
                     assert_eq!(res as i32, reference, "{} {} {}", a_str, b_str, i);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn stress_test_bitty_simd_1_to_n_limited() {
+        let test_seqs_long: [&[u8]; 11] = [
+            b"",
+            b" ",
+            b"  ",
+            b"   ",
+            b"    ",
+            b"abab",
+            b"bab",
+            b"baba",
+            b"abababab",
+            b"babababa",
+            b"babbbbaba",
+        ];
+        for a in test_seqs_long.iter() {
+            for b in test_seqs_long.iter() {
+                for max_dist in 1..10i32 {
+                    let a_str = std::str::from_utf8(a).unwrap();
+                    let b_str = std::str::from_utf8(b).unwrap();
+                    let input: [&[u8]; 256] = array::from_fn(|_s| *a);
+
+                    let bitwise_results = bitty_levenshtein_simd_by_1_limited::<32, 256>(
+                        &input,
+                        b,
+                        max_dist as usize,
+                    );
+
+                    let result = (bitwise_results[0] as i32);
+                    let reference_uncut =
+                        _levenshtein(std::str::from_utf8(input[0]).unwrap(), b_str) as i32;
+                    let reference = reference_uncut.min(max_dist + 1);
+                    assert_eq!(result, reference, "|{}| |{}| {}", a_str, b_str, max_dist);
                 }
             }
         }

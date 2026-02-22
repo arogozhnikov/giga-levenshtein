@@ -303,11 +303,6 @@ fn levenshtein_simd_by_1<const N: usize>(a: &[&[u8]; N], b: &[u8]) -> [u8; N] {
     return *prev[blen].as_array();
 }
 
-#[allow(dead_code)]
-fn select<const N: usize>(cond: U8<N>, first: U8<N>, second: U8<N>) -> U8<N> {
-    return (first & cond) | (second & !cond);
-}
-
 pub fn levenshtein_n_by_1(a: Vec<&[u8]>, b: &[u8]) -> Vec<u8> {
     assert!(!b.contains(&255));
     a.chunks(32)
@@ -333,79 +328,6 @@ pub fn bitty_levenshtein_n_by_1(a: Vec<&[u8]>, b: &[u8]) -> Vec<u8> {
         })
         .collect()
 }
-
-#[allow(dead_code)]
-fn levenshtein_n_by_8<const N: usize>(a: [&[u8]; N], b: [&[u8]; 8]) -> [u8; N] {
-    let (alen, blen) = (a[0].len(), b.len());
-    // TODO init is totally bad, dx=+1, dy=?
-    let mut prev: Vec<U8<N>> = (0..4 * (blen + 1))
-        .map(|i| U8::<N>::splat(i as u8))
-        .collect();
-    let mut curr = vec![U8::<N>::splat(0); 4 * (blen + 1)];
-
-    let mut bit_shifts: Vec<U8<N>> = vec![]; // 1 for each mismatch
-
-    let one = U8::<N>::splat(1);
-    let zeroes = U8::<N>::splat(0);
-
-    for i in 1..=alen {
-        let mut is_same = zeroes;
-        let c_a = U8::<N>::from_array(std::array::from_fn(|s| a[s][i - 1] as u8));
-
-        let mut dy_p = one;
-        let mut dy_n = zeroes;
-
-        for j in 1..=blen {
-            for shift in 0..8 {
-                is_same = is_same << 1;
-                is_same = c_a
-                    .simd_eq(U8::<N>::splat(b[shift][j - 1]))
-                    .select(is_same + one, is_same);
-            }
-            let (dxp, dxn) = (prev[2 * j + 0], prev[2 * j + 1]);
-
-            let diag0 = is_same | dxn | dy_n;
-
-            curr[4 * j + 0] = select(diag0, dy_n, !dy_n); // dxp
-            curr[4 * j + 1] = select(diag0, dy_p, zeroes); // dxn
-            dy_p = select(diag0, dxn, !dxn);
-            dy_n = select(diag0, dxp, zeroes);
-            if j == i {
-                bit_shifts.push(diag0);
-            }
-            if j >= alen {
-                bit_shifts.push(dy_p);
-            }
-        }
-        std::mem::swap(&mut prev, &mut curr);
-    }
-
-    return *prev[blen].as_array();
-}
-
-// fn compute_sum<const N: usize>(a: &[U8<N>]) -> [u16; N] {
-//     let mut counters: [Simd<u8, N>; 8] = array::from_fn(|_| U8::<N>::splat(0));
-//     let mask = Simd::<u8, N>::splat(1);
-//     let mut result: [u16; N] = std::array::from_fn(|_i| 0u16);
-
-//     for i in 0..a.len() {
-//         let item = a[i];
-//         for i in 0..8 {
-//             counters[i] += (item >> (i as u8)) & mask;
-//         }
-//         if (i % 128 == 0) || (i + 1 == a.len()) {
-//             for i in 0..N {
-//                 result[i * 8..(i + 1) * N]
-//                     .iter_mut()
-//                     .zip(&counters[i].to_array())
-//                     .for_each(|(x, y)| *x += *y as u16);
-//             }
-//             counters = array::from_fn(|_| U8::<N>::splat(0)); // reset
-//         }
-//     }
-//     // dump rest of counters to result
-//     return result;
-// }
 
 #[cfg(test)]
 mod tests {

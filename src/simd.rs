@@ -155,6 +155,7 @@ pub fn bitty_levenshtein_simd_by_1_limited<const N: usize, const M: usize>(
     max_dist: usize,
 ) -> [u8; M] {
     // assumes all lengths are identical, does not check this right now
+    // remark: pre-computing is_match is slower if max_dist is smaller than dictionary
     let (alen, blen) = (a[0].len(), b.len());
     assert!(max_dist <= 254);
     if (alen + max_dist < blen) || (blen + max_dist < alen) {
@@ -172,11 +173,9 @@ pub fn bitty_levenshtein_simd_by_1_limited<const N: usize, const M: usize>(
     // myers-style algo
     let mut diags = vec![U8::<N>::splat(0); blen];
     //
-    let mut prev_hp = vec![U8::<N>::splat(255); blen];
-    let mut prev_hn = vec![U8::<N>::splat(0); blen];
     //
-    let mut curr_hp = vec![U8::<N>::splat(255); blen];
-    let mut curr_hn = vec![U8::<N>::splat(0); blen];
+    let mut row_hp = vec![U8::<N>::splat(255); blen];
+    let mut row_hn = vec![U8::<N>::splat(0); blen];
 
     let mut start_penalty = 0u8;
     let mut last_lo = 1000;
@@ -193,9 +192,18 @@ pub fn bitty_levenshtein_simd_by_1_limited<const N: usize, const M: usize>(
         if lo == 0 {
             start_penalty = i as u8;
         }
+
+        let mut prev_hn_jm1;
+        let mut prev_hp_jm1;
+        let mut prev_hp_j;
+        let mut prev_hn_j;
+
         last_lo = lo;
         {
             let j = lo;
+            prev_hn_j = row_hn[j];
+            prev_hp_j = row_hp[j];
+
             let b_j = U8::<N>::splat(b[j]);
             let mut is_match = U8::<N>::splat(0);
             for shift in 0..8 {
@@ -205,18 +213,22 @@ pub fn bitty_levenshtein_simd_by_1_limited<const N: usize, const M: usize>(
             }
 
             // curr_d[j], before we used previous variable
-            curr_dnp_j = prev_hn[j] | is_match;
-            {
-                // curr_h[j] = curr_d[j] - curr_v[j]
-                // res := curr_dp[j] - curr_vp[j] + curr_vn[j];
-                curr_hp[j] = U8::<N>::splat(0); // res > 0
-                curr_hn[j] = curr_dnp_j; // res < 0
-            }
+            curr_dnp_j = prev_hn_j | is_match;
+
+            // curr_h[j] = curr_d[j] - curr_v[j]
+            // res := curr_dp[j] - curr_vp[j] + curr_vn[j];
+            row_hp[j] = U8::<N>::splat(0); // res > 0
+            row_hn[j] = curr_dnp_j; // res < 0
 
             diags[j] = !curr_dnp_j;
         }
 
         for j in lo + 1..hi {
+            prev_hn_jm1 = prev_hn_j;
+            prev_hp_jm1 = prev_hp_j;
+            prev_hn_j = row_hn[j];
+            prev_hp_j = row_hp[j];
+
             let b_j = U8::<N>::splat(b[j]);
             let mut is_match = U8::<N>::splat(0);
             for shift in 0..8 {
@@ -227,21 +239,16 @@ pub fn bitty_levenshtein_simd_by_1_limited<const N: usize, const M: usize>(
             // curr_d[j - i] = prev_h[ j - 1 ] + curr_v [ j ]
             // res := curr_dp[j - 1] - prev_hp[j - 1] + prev_hn[j - 1];
             let curr_dnp_j_m1 = curr_dnp_j;
-            let curr_vp_j = prev_hn[j - 1] | !(curr_dnp_j_m1 | prev_hp[j - 1]); // res > 0
-            let curr_vn_j = prev_hp[j - 1] & curr_dnp_j_m1; // res < 0
+            let curr_vp_j = prev_hn_jm1 | !(curr_dnp_j_m1 | prev_hp_jm1); // res > 0
+            let curr_vn_j = prev_hp_jm1 & curr_dnp_j_m1; // res < 0
 
             // curr_d[j], before we used previous variable
-            curr_dnp_j = prev_hn[j] | curr_vn_j | is_match;
-            {
-                // curr_h[j] = curr_d[j] - curr_v[j]
-                // res := curr_dp[j] - curr_vp[j] + curr_vn[j];
-                curr_hp[j] = !(curr_dnp_j | curr_vp_j) | curr_vn_j; // res > 0
-                curr_hn[j] = curr_vp_j & curr_dnp_j; // res < 0
-            }
-        }
-        if i + 1 < alen {
-            std::mem::swap(&mut prev_hn, &mut curr_hn);
-            std::mem::swap(&mut prev_hp, &mut curr_hp);
+            curr_dnp_j = prev_hn_j | curr_vn_j | is_match;
+
+            // curr_h[j] = curr_d[j] - curr_v[j]
+            // res := curr_dp[j] - curr_vp[j] + curr_vn[j];
+            row_hp[j] = !(curr_dnp_j | curr_vp_j) | curr_vn_j; // res > 0
+            row_hn[j] = curr_vp_j & curr_dnp_j; // res < 0
         }
     }
 
@@ -255,11 +262,11 @@ pub fn bitty_levenshtein_simd_by_1_limited<const N: usize, const M: usize>(
                 .iter()
                 .map(|x| (*x >> shift) & one)
                 .sum::<U8<N>>()
-            + curr_hp[last_lo + 1..]
+            + row_hp[last_lo + 1..]
                 .iter()
                 .map(|x| (*x >> shift) & one)
                 .sum::<U8<N>>()
-            - curr_hn[last_lo + 1..]
+            - row_hn[last_lo + 1..]
                 .iter()
                 .map(|x| (*x >> shift) & one)
                 .sum::<U8<N>>();

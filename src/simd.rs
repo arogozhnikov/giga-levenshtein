@@ -177,9 +177,6 @@ pub fn bitty_levenshtein_simd_by_1_limited<const N: usize, const M: usize>(
     let mut row_hp = vec![U8::<N>::splat(255); blen];
     let mut row_hn = vec![U8::<N>::splat(0); blen];
 
-    let mut start_penalty = 0u8;
-    let mut last_lo = 1000;
-
     for i in 0..alen {
         let mut curr_dnp_j;
 
@@ -189,16 +186,12 @@ pub fn bitty_levenshtein_simd_by_1_limited<const N: usize, const M: usize>(
 
         let lo = i.saturating_sub(max_dist);
         let hi = (i + max_dist + 1).min(blen);
-        if lo == 0 {
-            start_penalty = i as u8;
-        }
 
         let mut prev_hn_jm1;
         let mut prev_hp_jm1;
         let mut prev_hp_j;
         let mut prev_hn_j;
 
-        last_lo = lo;
         {
             let j = lo;
             prev_hn_j = row_hn[j];
@@ -256,7 +249,10 @@ pub fn bitty_levenshtein_simd_by_1_limited<const N: usize, const M: usize>(
     let mut result = [0u8; M];
     let maxval = (max_dist + 1) as u8;
 
+    let last_lo = (alen - 1).saturating_sub(max_dist);
+
     for shift in 0..8 {
+        let start_penalty = max_dist.min(alen - 1) as u8;
         let result_for_shift: U8<N> = U8::<N>::splat(start_penalty)
             + diags[..last_lo + 1]
                 .iter()

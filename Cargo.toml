@@ -8,11 +8,12 @@ name = "rust_levenshtein"
 crate-type = ["cdylib", "rlib"]
 
 [features]
-default = ["python"]
+default = []
 python = ["dep:pyo3"]
+extension-module = ["python", "pyo3/extension-module"]
 
 [dependencies]
-pyo3 = { version = "0.23", features = ["extension-module"], optional = true }
+pyo3 = { version = "0.23", optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

@@ -1,8 +1,6 @@
-use std::array;
 use std::simd::cmp::SimdOrd;
 use std::simd::cmp::SimdPartialEq;
 use std::simd::{Select, Simd};
-use std::time::Instant;
 
 fn _levenshtein(a: &str, b: &str) -> usize {
     let n = b.len();
@@ -299,6 +297,7 @@ fn levenshtein_simd_by_1<const N: usize>(a: &[&[u8]; N], b: &[u8]) -> [u8; N] {
     return *prev[J].as_array();
 }
 
+#[allow(dead_code)]
 fn select<const N: usize>(cond: U8<N>, first: U8<N>, second: U8<N>) -> U8<N> {
     return (first & cond) | (second & !cond);
 }
@@ -329,6 +328,7 @@ pub fn bitty_levenshtein_n_by_1(a: Vec<&[u8]>, b: &[u8]) -> Vec<u8> {
         .collect()
 }
 
+#[allow(dead_code)]
 fn levenshtein_n_by_8<const N: usize>(a: [&[u8]; N], b: [&[u8]; 8]) -> [u8; N] {
     let (alen, blen) = (a[0].len(), b.len());
     // TODO init is totally bad, dx=+1, dy=?
@@ -401,56 +401,6 @@ fn levenshtein_n_by_8<const N: usize>(a: [&[u8]; N], b: [&[u8]; 8]) -> [u8; N] {
 //     return result;
 // }
 
-fn main() {
-    let a = "abcd1234".repeat(1024 / 8);
-    let mut b = a.clone();
-    b.replace_range(512..514, "ee");
-
-    for _i in 0..3 {
-        let start = Instant::now();
-        let dist = _levenshtein(&a, &b);
-        let elapsed = start.elapsed();
-        println!("Time elapsed 1: {:?} {:?}", elapsed, dist);
-
-        let lambda = |i| {
-            if i % 2 == 0 {
-                a.as_bytes()
-            } else {
-                b.as_bytes()
-            }
-        };
-
-        let a_seqs: [&[u8]; 8] = array::from_fn(lambda);
-        let start = Instant::now();
-        let dist = levenshtein_n_by_1(a_seqs.to_vec(), b.as_bytes());
-        let elapsed = start.elapsed();
-
-        println!("Time elapsed 2: {:?} {:?}", elapsed, dist[0]);
-
-        let a_seqs: [&[u8]; 16] = array::from_fn(lambda);
-        let start = Instant::now();
-        let dist = levenshtein_n_by_1(a_seqs.to_vec(), b.as_bytes());
-        let elapsed = start.elapsed();
-
-        println!("Time elapsed 3: {:?} {:?}", elapsed, dist[0]);
-
-        let a_seqs: [&[u8]; 32] = array::from_fn(lambda);
-        let start = Instant::now();
-        let dist = levenshtein_n_by_1(a_seqs.to_vec(), b.as_bytes());
-        let elapsed = start.elapsed();
-
-        // println!("Levenshtein distance: {}", dist);
-        println!("Time elapsed 4: {:?} {:?}", elapsed, dist[0]);
-
-        let a_seqs: [&[u8]; 32] = array::from_fn(lambda);
-        let b_seqs: [&[u8]; 8] = array::from_fn(lambda);
-        let start = Instant::now();
-        let dist = levenshtein_n_by_8(a_seqs, b_seqs);
-        let elapsed = start.elapsed();
-        println!("Time elapsed 5: {:?} {:?}", elapsed, dist[0]);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -521,7 +471,7 @@ mod tests {
                 let a_str = std::str::from_utf8(a).unwrap();
                 let b_str = std::str::from_utf8(b).unwrap();
                 let input: [&[u8]; 256] =
-                    array::from_fn(|s| if s % 13 != 0 { *a } else { consts[(*a).len()] });
+                    std::array::from_fn(|s| if s % 13 != 0 { *a } else { consts[(*a).len()] });
 
                 let bitwise_results = bitty_levenshtein_simd_by_1::<32, 256>(&input, b);
                 for (i, res) in bitwise_results.into_iter().enumerate() {
@@ -553,7 +503,7 @@ mod tests {
                 for max_dist in 1..10i32 {
                     let a_str = std::str::from_utf8(a).unwrap();
                     let b_str = std::str::from_utf8(b).unwrap();
-                    let input: [&[u8]; 256] = array::from_fn(|_s| *a);
+                    let input: [&[u8]; 256] = std::array::from_fn(|_s| *a);
 
                     let bitwise_results = bitty_levenshtein_simd_by_1_limited::<32, 256>(
                         &input,

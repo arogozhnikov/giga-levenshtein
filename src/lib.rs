@@ -3,6 +3,7 @@
 use pyo3::prelude::*;
 
 pub mod simd;
+#[cfg(feature = "python")]
 use crate::simd as levenshtein_simd;
 
 /// Compute the Levenshtein distance between two byte slices using a single-row DP approach.

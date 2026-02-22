@@ -173,7 +173,6 @@ pub fn bitty_levenshtein_simd_by_1_limited<const N: usize, const M: usize>(
     // myers-style algo
     let mut diags = vec![U8::<N>::splat(0); blen];
     //
-    //
     let mut row_hp = vec![U8::<N>::splat(255); blen];
     let mut row_hn = vec![U8::<N>::splat(0); blen];
 
@@ -187,8 +186,6 @@ pub fn bitty_levenshtein_simd_by_1_limited<const N: usize, const M: usize>(
         let lo = i.saturating_sub(max_dist);
         let hi = (i + max_dist + 1).min(blen);
 
-        let mut prev_hn_jm1;
-        let mut prev_hp_jm1;
         let mut prev_hp_j;
         let mut prev_hn_j;
 
@@ -217,8 +214,8 @@ pub fn bitty_levenshtein_simd_by_1_limited<const N: usize, const M: usize>(
         }
 
         for j in lo + 1..hi {
-            prev_hn_jm1 = prev_hn_j;
-            prev_hp_jm1 = prev_hp_j;
+            let prev_hn_jm1 = prev_hn_j;
+            let prev_hp_jm1 = prev_hp_j;
             prev_hn_j = row_hn[j];
             prev_hp_j = row_hp[j];
 
@@ -249,23 +246,10 @@ pub fn bitty_levenshtein_simd_by_1_limited<const N: usize, const M: usize>(
     let mut result = [0u8; M];
     let maxval = (max_dist + 1) as u8;
 
-    let last_lo = (alen - 1).saturating_sub(max_dist);
-
     for shift in 0..8 {
-        let start_penalty = max_dist.min(alen - 1) as u8;
-        let result_for_shift: U8<N> = U8::<N>::splat(start_penalty)
-            + diags[..last_lo + 1]
-                .iter()
-                .map(|x| (*x >> shift) & one)
-                .sum::<U8<N>>()
-            + row_hp[last_lo + 1..]
-                .iter()
-                .map(|x| (*x >> shift) & one)
-                .sum::<U8<N>>()
-            - row_hn[last_lo + 1..]
-                .iter()
-                .map(|x| (*x >> shift) & one)
-                .sum::<U8<N>>();
+        let result_for_shift: U8<N> = U8::<N>::splat(alen as u8)
+            + row_hp.iter().map(|x| (*x >> shift) & one).sum::<U8<N>>()
+            - row_hn.iter().map(|x| (*x >> shift) & one).sum::<U8<N>>();
 
         for s in 0..N {
             result[shift as usize + s * 8] = result_for_shift[s].min(maxval);

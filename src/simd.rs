@@ -279,20 +279,19 @@ pub fn bitty_levenshtein_simd_by_1_limited<const N: usize, const M: usize>(
     result
 }
 
-#[allow(non_snake_case)]
 fn levenshtein_simd_by_1<const N: usize>(a: &[&[u8]; N], b: &[u8]) -> [u8; N] {
     // assumes all lengths are identical, not checked right now
-    let (I, J) = (a[0].len(), b.len());
-    let mut prev: Vec<U8<N>> = (0..=J).map(|i| U8::<N>::splat(i as u8)).collect();
-    let mut curr = vec![U8::<N>::splat(0); J + 1];
+    let (alen, blen) = (a[0].len(), b.len());
+    let mut prev: Vec<U8<N>> = (0..=blen).map(|i| U8::<N>::splat(i as u8)).collect();
+    let mut curr = vec![U8::<N>::splat(0); blen + 1];
     let one = U8::<N>::splat(1);
 
-    for i in 1..=I {
+    for i in 1..=alen {
         curr[0] = U8::<N>::splat(i as u8);
 
         let c_a = U8::<N>::from_array(std::array::from_fn(|s| a[s][i - 1] as u8));
 
-        for j in 1..=J {
+        for j in 1..=blen {
             let mask = c_a.simd_eq(U8::<N>::splat(b[j - 1]));
 
             curr[j] = (mask.select(prev[j - 1], prev[j - 1] + one))
@@ -301,7 +300,7 @@ fn levenshtein_simd_by_1<const N: usize>(a: &[&[u8]; N], b: &[u8]) -> [u8; N] {
         }
         std::mem::swap(&mut prev, &mut curr);
     }
-    return *prev[J].as_array();
+    return *prev[blen].as_array();
 }
 
 #[allow(dead_code)]

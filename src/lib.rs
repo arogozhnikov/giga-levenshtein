@@ -1,11 +1,12 @@
 #![feature(portable_simd)]
+#[cfg(feature = "python")]
 use pyo3::prelude::*;
 
-mod simd;
+pub mod simd;
 use crate::simd as levenshtein_simd;
 
 /// Compute the Levenshtein distance between two byte slices using a single-row DP approach.
-fn levenshtein_bytes(a: &[u8], b: &[u8]) -> usize {
+pub fn levenshtein_bytes(a: &[u8], b: &[u8]) -> usize {
     let m = a.len();
     let n = b.len();
 
@@ -38,6 +39,7 @@ fn levenshtein_bytes(a: &[u8], b: &[u8]) -> usize {
 }
 
 /// Compute Levenshtein distances from one byte slice to a list of byte slices.
+#[cfg(feature = "python")]
 #[pyfunction]
 fn compute_levenshtein_1_to_n_bytes(left: &[u8], right: Vec<Vec<u8>>) -> Vec<usize> {
     right
@@ -47,6 +49,7 @@ fn compute_levenshtein_1_to_n_bytes(left: &[u8], right: Vec<Vec<u8>>) -> Vec<usi
 }
 
 /// Compute Levenshtein distances from one byte slice to a list of byte slices using SIMD.
+#[cfg(feature = "python")]
 #[pyfunction]
 fn compute_levenshtein_1_to_n_bytes_simd(left: &[u8], right: Vec<Vec<u8>>) -> Vec<usize> {
     let results =
@@ -55,6 +58,7 @@ fn compute_levenshtein_1_to_n_bytes_simd(left: &[u8], right: Vec<Vec<u8>>) -> Ve
 }
 
 /// Compute Levenshtein distances from one byte slice to a list of byte slices using Bitty SIMD.
+#[cfg(feature = "python")]
 #[pyfunction]
 fn compute_levenshtein_1_to_n_bytes_bitty_simd(left: &[u8], right: Vec<Vec<u8>>) -> Vec<usize> {
     let results = levenshtein_simd::bitty_levenshtein_n_by_1(
@@ -65,6 +69,7 @@ fn compute_levenshtein_1_to_n_bytes_bitty_simd(left: &[u8], right: Vec<Vec<u8>>)
 }
 
 /// Compute Levenshtein distances from each byte slice in `left` to each byte slice in `right`.
+#[cfg(feature = "python")]
 #[pyfunction]
 fn compute_levenshtein_m_to_n_bytes(left: Vec<Vec<u8>>, right: Vec<Vec<u8>>) -> Vec<Vec<usize>> {
     left.iter()
@@ -77,6 +82,7 @@ fn compute_levenshtein_m_to_n_bytes(left: Vec<Vec<u8>>, right: Vec<Vec<u8>>) -> 
         .collect()
 }
 
+#[cfg(feature = "python")]
 #[pymodule]
 fn rust_levenshtein(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compute_levenshtein_1_to_n_bytes, m)?)?;

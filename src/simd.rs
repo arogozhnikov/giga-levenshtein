@@ -561,7 +561,7 @@ mod tests {
                         max_dist as usize,
                     );
 
-                    let result = (bitwise_results[0] as i32);
+                    let result = bitwise_results[0] as i32;
                     let reference_uncut =
                         _levenshtein(std::str::from_utf8(input[0]).unwrap(), b_str) as i32;
                     let reference = reference_uncut.min(max_dist + 1);

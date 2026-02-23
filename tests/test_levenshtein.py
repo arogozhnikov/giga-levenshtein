@@ -77,30 +77,28 @@ class TestComputeLevenshtein1ToNBytesBittySIMD:
 
 class TestComputeLevenshteinMToNBytes:
     def test_basic(self):
-        result = rust_levenshtein.compute_levenshtein_m_to_n_bytes(
+        result = rust_levenshtein.compute_levenshtein_m_to_n(
             [b"kitten", b"sitting"],
             [b"kitten", b"sitting"],
         )
         assert result == [[0, 3], [3, 0]]
 
     def test_empty_left_list(self):
-        result = rust_levenshtein.compute_levenshtein_m_to_n_bytes([], [b"abc", b"def"])
+        result = rust_levenshtein.compute_levenshtein_m_to_n([], [b"abc", b"def"])
         assert result == []
 
     def test_empty_right_list(self):
-        result = rust_levenshtein.compute_levenshtein_m_to_n_bytes([b"abc", b"def"], [])
+        result = rust_levenshtein.compute_levenshtein_m_to_n([b"abc", b"def"], [])
         assert result == [[], []]
 
     def test_single_pair(self):
-        result = rust_levenshtein.compute_levenshtein_m_to_n_bytes(
-            [b"saturday"], [b"sunday"]
-        )
+        result = rust_levenshtein.compute_levenshtein_m_to_n([b"saturday"], [b"sunday"])
         assert result == [[3]]
 
     def test_symmetric(self):
         left = [b"abc", b"def", b"ghi"]
         right = [b"xyz", b"abc"]
-        result = rust_levenshtein.compute_levenshtein_m_to_n_bytes(left, right)
+        result = rust_levenshtein.compute_levenshtein_m_to_n(left, right)
         # result[i][j] should equal the distance from left[i] to right[j]
         assert len(result) == 3
         assert all(len(row) == 2 for row in result)

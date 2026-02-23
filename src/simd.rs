@@ -171,14 +171,10 @@ pub fn bitty_levenshtein_simd_by_1_limited<const N: usize, const M: usize>(
     assert!(N * 8 == M);
 
     // myers-style algo
-    let mut diags = vec![U8::<N>::splat(0); blen];
-    //
     let mut row_hp = vec![U8::<N>::splat(255); blen];
     let mut row_hn = vec![U8::<N>::splat(0); blen];
 
     for i in 0..alen {
-        let mut curr_dnp_j;
-
         let c_a: [U8<N>; 8] = std::array::from_fn(|shift| {
             U8::<N>::from_array(std::array::from_fn(|s| a[shift + 8 * s][i] as u8))
         });
@@ -186,34 +182,11 @@ pub fn bitty_levenshtein_simd_by_1_limited<const N: usize, const M: usize>(
         let lo = i.saturating_sub(max_dist);
         let hi = (i + max_dist + 1).min(blen);
 
-        let mut prev_hp_j;
-        let mut prev_hn_j;
+        let mut prev_hp_j = U8::<N>::splat(0);
+        let mut prev_hn_j = U8::<N>::splat(255);
+        let mut curr_dnp_j = U8::<N>::splat(255);
 
-        {
-            let j = lo;
-            prev_hn_j = row_hn[j];
-            prev_hp_j = row_hp[j];
-
-            let b_j = U8::<N>::splat(b[j]);
-            let mut is_match = U8::<N>::splat(0);
-            for shift in 0..8 {
-                is_match |= c_a[shift]
-                    .simd_eq(b_j)
-                    .select(U8::<N>::splat(1 << shift), U8::<N>::splat(0));
-            }
-
-            // curr_d[j], before we used previous variable
-            curr_dnp_j = prev_hn_j | is_match;
-
-            // curr_h[j] = curr_d[j] - curr_v[j]
-            // res := curr_dp[j] - curr_vp[j] + curr_vn[j];
-            row_hp[j] = U8::<N>::splat(0); // res > 0
-            row_hn[j] = curr_dnp_j; // res < 0
-
-            diags[j] = !curr_dnp_j;
-        }
-
-        for j in lo + 1..hi {
+        for j in lo..hi {
             let prev_hn_jm1 = prev_hn_j;
             let prev_hp_jm1 = prev_hp_j;
             prev_hn_j = row_hn[j];
@@ -259,6 +232,131 @@ pub fn bitty_levenshtein_simd_by_1_limited<const N: usize, const M: usize>(
     result
 }
 
+pub fn bitty_levenshtein_simd_by_n_limited<const N: usize, const M: usize>(
+    a: &[&[u8]; M],
+    b: &Vec<&[u8]>,
+    max_dist: usize,
+) -> Vec<Vec<i32>> {
+    assert!(max_dist <= 254);
+
+    let alen = a.iter().map(|x| x.len()).max().unwrap_or(0);
+    let blen = b.iter().map(|x| x.len()).max().unwrap_or(0);
+
+    let maxval = (max_dist + 1) as i32;
+    if blen == 0 {
+        let res = a
+            .iter()
+            .map(|x| vec![(x.len() as i32).min(maxval); b.len()])
+            .collect();
+        return res;
+    }
+    if alen == 0 {
+        let lens: Vec<i32> = b.iter().map(|x| (x.len() as i32).min(maxval)).collect();
+        let res = vec![lens; a.len()];
+        return res;
+    }
+
+    // myers-style algo
+    let mut rows_hp = vec![vec![U8::<N>::splat(255); blen]; b.len()];
+    let mut rows_hn = vec![vec![U8::<N>::splat(0); blen]; b.len()];
+
+    for i in 0..alen {
+        let mut is_matches = [U8::<N>::splat(0); 256];
+        for shift in 0..8 {
+            let ca_shift = U8::<N>::from_array(std::array::from_fn(|s| {
+                if i < a[shift + 8 * s].len() {
+                    a[shift + 8 * s][i]
+                } else {
+                    0
+                }
+            }));
+            for c in 0..256 {
+                is_matches[c] |= ca_shift
+                    .simd_eq(U8::<N>::splat(c as u8))
+                    .select(U8::<N>::splat(1 << shift), U8::<N>::splat(0));
+            }
+        }
+
+        let mut mask = U8::<N>::splat(0);
+        for shift in 0..8 {
+            mask |= U8::<N>::from_array(std::array::from_fn(|s| {
+                if i < a[shift + 8 * s].len() {
+                    1u8 << shift
+                } else {
+                    0u8
+                }
+            }));
+        }
+        for c in 0..256 {
+            is_matches[c] &= mask;
+        }
+
+        let lo = i.saturating_sub(max_dist);
+        let hi = (i + max_dist + 1).min(blen);
+
+        for (bseq_id, bseq) in b.iter().enumerate() {
+            let row_hp = &mut rows_hp[bseq_id];
+            let row_hn = &mut rows_hn[bseq_id];
+
+            let mut prev_hp_j = U8::<N>::splat(0);
+            let mut prev_hn_j = U8::<N>::splat(255);
+            let mut curr_dnp_j = U8::<N>::splat(255);
+
+            for j in lo..hi.min(bseq.len()) {
+                let prev_hp_jm1 = prev_hp_j;
+                let prev_hn_jm1 = prev_hn_j;
+                prev_hp_j = row_hp[j];
+                prev_hn_j = row_hn[j];
+
+                let is_match = is_matches[bseq[j] as usize];
+                // curr_d[j - i] = prev_h[ j - 1 ] + curr_v [ j ]
+                // res := curr_dp[j - 1] - prev_hp[j - 1] + prev_hn[j - 1];
+                let curr_dnp_j_m1 = curr_dnp_j;
+                let curr_vp_j = prev_hn_jm1 | !(curr_dnp_j_m1 | prev_hp_jm1); // res > 0
+                let curr_vn_j = prev_hp_jm1 & curr_dnp_j_m1; // res < 0
+
+                // curr_d[j], before we used previous variable
+                curr_dnp_j = prev_hn_j | curr_vn_j | is_match;
+
+                // curr_h[j] = curr_d[j] - curr_v[j]
+                // res := curr_dp[j] - curr_vp[j] + curr_vn[j];
+                row_hp[j] = !(curr_dnp_j | curr_vp_j) | curr_vn_j; // res > 0
+                row_hn[j] = curr_vp_j & curr_dnp_j; // res < 0
+            }
+        }
+    }
+
+    let one = U8::<N>::splat(1);
+    let mut result = vec![vec![0i32; b.len()]; a.len()];
+
+    let maxval = (max_dist + 1) as i32;
+
+    for shift in 0..8 {
+        for j in 0..b.len() {
+            let result_for_shift: U8<N> = U8::<N>::splat(alen as u8)
+                + rows_hp[j]
+                    .iter()
+                    .map(|x| (*x >> shift) & one)
+                    .sum::<U8<N>>()
+                - rows_hn[j]
+                    .iter()
+                    .map(|x| (*x >> shift) & one)
+                    .sum::<U8<N>>();
+
+            for s in 0..N {
+                let i = shift as usize + s * 8;
+                let uncomp_distance = result_for_shift[s] as i32;
+
+                result[i][j] = (uncomp_distance
+                    - (alen - a[i].len()).max(blen - b[j].len()) as i32)
+                    .min(maxval);
+            }
+        }
+    }
+
+    result
+}
+
 fn levenshtein_simd_by_1<const N: usize>(a: &[&[u8]; N], b: &[u8]) -> [u8; N] {
     // assumes all lengths are identical, not checked right now
     let (alen, blen) = (a[0].len(), b.len());
@@ -296,14 +394,20 @@ pub fn levenshtein_n_by_1(a: Vec<&[u8]>, b: &[u8]) -> Vec<u8> {
         .collect()
 }
 
-pub fn bitty_levenshtein_n_by_1(a: Vec<&[u8]>, b: &[u8]) -> Vec<u8> {
+pub fn bitty_levenshtein_n_by_1(a: &Vec<&[u8]>, b: &[u8]) -> Vec<u8> {
     assert!(!b.contains(&255));
-    a.chunks(128)
+    const CHUNK_SIZE: usize = 256;
+
+    (*a).chunks(CHUNK_SIZE)
         .flat_map(|chunk| {
-            if chunk.len() == 128 {
-                bitty_levenshtein_simd_by_1::<16, 128>(chunk.try_into().unwrap(), b).to_vec()
+            if chunk.len() == CHUNK_SIZE {
+                bitty_levenshtein_simd_by_1::<{ CHUNK_SIZE / 8 }, CHUNK_SIZE>(
+                    chunk.try_into().unwrap(),
+                    b,
+                )
+                .to_vec()
             } else {
-                panic!("chunk len is not 128");
+                panic!("chunk len is not {CHUNK_SIZE}",);
             }
         })
         .collect()
@@ -393,12 +497,17 @@ mod tests {
 
     #[test]
     fn stress_test_bitty_simd_1_to_n_limited() {
-        let test_seqs_long: [&[u8]; 11] = [
+        let test_seqs_long: [&[u8]; 16] = [
             b"",
             b" ",
             b"  ",
             b"   ",
             b"    ",
+            b"ab",
+            b"abc",
+            b"cab",
+            b"axc",
+            b"ac",
             b"abab",
             b"bab",
             b"baba",
@@ -424,6 +533,53 @@ mod tests {
                         _levenshtein(std::str::from_utf8(input[0]).unwrap(), b_str) as i32;
                     let reference = reference_uncut.min(max_dist + 1);
                     assert_eq!(result, reference, "|{}| |{}| {}", a_str, b_str, max_dist);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn stress_test_bitty_simd_to_n_limited() {
+        let test_seqs_long: [&[u8]; 16] = [
+            b"",
+            b" ",
+            b"  ",
+            b"   ",
+            b"    ",
+            b"ab",
+            b"abc",
+            b"cab",
+            b"axc",
+            b"ac",
+            b"abab",
+            b"bab",
+            b"baba",
+            b"abababab",
+            b"babababa",
+            b"babbbbaba",
+        ];
+        for a in test_seqs_long.iter() {
+            for b in test_seqs_long.iter() {
+                for n_bseqs in [1, 17, 302] {
+                    for max_dist in 1..10i32 {
+                        let a_str = std::str::from_utf8(a).unwrap();
+                        let b_str = std::str::from_utf8(b).unwrap();
+
+                        let a_strs: [&[u8]; 256] = std::array::from_fn(|_| *a);
+                        let b_strs: Vec<&[u8]> = std::iter::repeat(*b).take(n_bseqs).collect();
+
+                        let bitwise_results = bitty_levenshtein_simd_by_n_limited::<32, 256>(
+                            &a_strs,
+                            &b_strs,
+                            max_dist as usize,
+                        );
+
+                        let result = bitwise_results[0][0] as i32;
+                        let reference_uncut =
+                            _levenshtein(std::str::from_utf8(a_strs[0]).unwrap(), b_str) as i32;
+                        let reference = reference_uncut.min(max_dist + 1);
+                        assert_eq!(result, reference, "|{}| |{}| {}", a_str, b_str, max_dist);
+                    }
                 }
             }
         }

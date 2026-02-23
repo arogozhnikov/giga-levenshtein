@@ -2,7 +2,7 @@ use std::simd::cmp::SimdOrd;
 use std::simd::cmp::SimdPartialEq;
 use std::simd::{Select, Simd};
 
-fn _levenshtein(a: &str, b: &str) -> usize {
+fn _naive_levenshtein_1_on_1(a: &str, b: &str) -> usize {
     let n = b.len();
     let mut prev = (0..=n).collect::<Vec<_>>();
     let mut curr = vec![0; n + 1];
@@ -17,7 +17,7 @@ fn _levenshtein(a: &str, b: &str) -> usize {
     prev[n]
 }
 
-fn _bitty_levenshtein(a: &[u8], b: &[u8]) -> u8 {
+fn _bitty_levenshtein_1_on_1(a: &[u8], b: &[u8]) -> u8 {
     // myers-style algo
     if b.len() == 0 {
         return a.len() as u8;
@@ -416,60 +416,42 @@ pub fn bitty_levenshtein_n_by_1(a: &Vec<&[u8]>, b: &[u8]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    const TEST_SEQS: [&'static [u8]; 67] = [
-        b"a", b"aa", b"aaa", b"aaaa", b"ab", b"aab", b"bab", b"abab", b"baba", b"Z9", b"k3x", b"T",
-        b"q7", b"mN2", b"r", b"8b", b"L0p", b"dx", b"Y", b"w4R", b"3", b"tK", b"p9q", b"H2", b"s",
-        b"Vx1", b"7", b"nB", b"c4", b"J", b"u8m", b"5t", b"g", b"R2d", b"y", b"0", b"eL", b"K9",
-        b"z3Q", b"b", b"M1", b"f8", b"X", b"h2k", b"6", b"dP", b"q", b"9z", b"W4", b"l", b"C7r",
-        b"2", b"vN", b"t", b"8Kx", b"G", b"m5", b"p", b"1aZ", b"r4", b"S", b"y7", b"k", b"D3",
-        b"0x", b"n", b"B8q",
+    const SHORT_TEST_SEQS: [&'static [u8]; 70] = [
+        b"", b"a", b"aa", b"aaa", b"aaaa", b"ab", b"ba", b"ac", b"aab", b"bab", b"abab", b"baba",
+        b"Z9", b"k3x", b"T", b"q7", b"mN2", b"r", b"8b", b"L0p", b"dx", b"Y", b"w4R", b"3", b"tK",
+        b"p9q", b"H2", b"s", b"Vx1", b"7", b"nB", b"c4", b"J", b"u8m", b"5t", b"g", b"R2d", b"y",
+        b"0", b"eL", b"K9", b"z3Q", b"b", b"M1", b"f8", b"X", b"h2k", b"6", b"dP", b"q", b"9z",
+        b"W4", b"l", b"C7r", b"2", b"vN", b"t", b"8Kx", b"G", b"m5", b"p", b"1aZ", b"r4", b"S",
+        b"y7", b"k", b"D3", b"0x", b"n", b"B8q",
+    ];
+
+    const TEST_SEQS_LONG: [&'static [u8]; 16] = [
+        b"",
+        b" ",
+        b"  ",
+        b"   ",
+        b"    ",
+        b"ab",
+        b"abc",
+        b"cab",
+        b"axc",
+        b"ac",
+        b"abab",
+        b"bab",
+        b"baba",
+        b"abababab",
+        b"babababa",
+        b"babbbbaba",
     ];
 
     #[test]
-    fn test_bitty_0_0() {
-        assert_eq!(_bitty_levenshtein(b"", b""), 0);
-    }
-
-    #[test]
-    fn test_bitty_0_1() {
-        assert_eq!(_bitty_levenshtein(b"", b"a"), 1);
-        assert_eq!(_bitty_levenshtein(b"a", b""), 1);
-    }
-
-    #[test]
-    fn test_bitty_1_1() {
-        assert_eq!(_bitty_levenshtein(b"a", b"a"), 0);
-        assert_eq!(_bitty_levenshtein(b"a", b"b"), 1);
-    }
-
-    #[test]
-    fn test_bitty_1_2() {
-        assert_eq!(_bitty_levenshtein(b"a", b"ab"), 1);
-        assert_eq!(_bitty_levenshtein(b"a", b"bc"), 2);
-    }
-
-    #[test]
-    fn test_bitty_2_1() {
-        assert_eq!(_bitty_levenshtein(b"ab", b"a"), 1);
-        assert_eq!(_bitty_levenshtein(b"bc", b"a"), 2);
-    }
-
-    #[test]
-    fn test_bitty_2_2() {
-        assert_eq!(_bitty_levenshtein(b"ab", b"ab"), 0);
-        assert_eq!(_bitty_levenshtein(b"ab", b"ac"), 1);
-        assert_eq!(_bitty_levenshtein(b"ab", b"bc"), 2);
-        assert_eq!(_bitty_levenshtein(b"ab", b"cd"), 2);
-    }
-
-    #[test]
-    fn stress_test_bitty() {
-        for a in TEST_SEQS.iter() {
-            for b in TEST_SEQS.iter() {
+    fn stress_test_bitty_1_on_1() {
+        for a in SHORT_TEST_SEQS.iter() {
+            for b in SHORT_TEST_SEQS.iter() {
                 let a_str = std::str::from_utf8(a).unwrap();
                 let b_str = std::str::from_utf8(b).unwrap();
-                let bitwise_result = _bitty_levenshtein(a, b) as i32;
-                let reference = _levenshtein(a_str, b_str) as i32;
+                let bitwise_result = _bitty_levenshtein_1_on_1(a, b) as i32;
+                let reference = _naive_levenshtein_1_on_1(a_str, b_str) as i32;
                 assert_eq!(bitwise_result, reference);
             }
         }
@@ -478,8 +460,8 @@ mod tests {
     #[test]
     fn stress_test_bitty_simd_1_to_n() {
         let consts: [&[u8]; 5] = [b"", b" ", b"  ", b"   ", b"    "];
-        for a in TEST_SEQS.iter() {
-            for b in TEST_SEQS.iter() {
+        for a in SHORT_TEST_SEQS.iter() {
+            for b in SHORT_TEST_SEQS.iter() {
                 let a_str = std::str::from_utf8(a).unwrap();
                 let b_str = std::str::from_utf8(b).unwrap();
                 let input: [&[u8]; 256] =
@@ -488,7 +470,8 @@ mod tests {
                 let bitwise_results = bitty_levenshtein_simd_by_1::<32, 256>(&input, b);
                 for (i, res) in bitwise_results.into_iter().enumerate() {
                     let reference =
-                        _levenshtein(std::str::from_utf8(input[i]).unwrap(), b_str) as i32;
+                        _naive_levenshtein_1_on_1(std::str::from_utf8(input[i]).unwrap(), b_str)
+                            as i32;
                     assert_eq!(res as i32, reference, "{} {} {}", a_str, b_str, i);
                 }
             }
@@ -497,26 +480,8 @@ mod tests {
 
     #[test]
     fn stress_test_bitty_simd_1_to_n_limited() {
-        let test_seqs_long: [&[u8]; 16] = [
-            b"",
-            b" ",
-            b"  ",
-            b"   ",
-            b"    ",
-            b"ab",
-            b"abc",
-            b"cab",
-            b"axc",
-            b"ac",
-            b"abab",
-            b"bab",
-            b"baba",
-            b"abababab",
-            b"babababa",
-            b"babbbbaba",
-        ];
-        for a in test_seqs_long.iter() {
-            for b in test_seqs_long.iter() {
+        for a in TEST_SEQS_LONG.iter() {
+            for b in TEST_SEQS_LONG.iter() {
                 for max_dist in 1..10i32 {
                     let a_str = std::str::from_utf8(a).unwrap();
                     let b_str = std::str::from_utf8(b).unwrap();
@@ -530,7 +495,8 @@ mod tests {
 
                     let result = bitwise_results[0] as i32;
                     let reference_uncut =
-                        _levenshtein(std::str::from_utf8(input[0]).unwrap(), b_str) as i32;
+                        _naive_levenshtein_1_on_1(std::str::from_utf8(input[0]).unwrap(), b_str)
+                            as i32;
                     let reference = reference_uncut.min(max_dist + 1);
                     assert_eq!(result, reference, "|{}| |{}| {}", a_str, b_str, max_dist);
                 }
@@ -540,28 +506,10 @@ mod tests {
 
     #[test]
     fn stress_test_bitty_simd_to_n_limited() {
-        let test_seqs_long: [&[u8]; 16] = [
-            b"",
-            b" ",
-            b"  ",
-            b"   ",
-            b"    ",
-            b"ab",
-            b"abc",
-            b"cab",
-            b"axc",
-            b"ac",
-            b"abab",
-            b"bab",
-            b"baba",
-            b"abababab",
-            b"babababa",
-            b"babbbbaba",
-        ];
-        for a in test_seqs_long.iter() {
-            for b in test_seqs_long.iter() {
+        for a in TEST_SEQS_LONG.iter() {
+            for b in TEST_SEQS_LONG.iter() {
                 for n_bseqs in [1, 17, 302] {
-                    for max_dist in 1..10i32 {
+                    for max_dist in 0..10i32 {
                         let a_str = std::str::from_utf8(a).unwrap();
                         let b_str = std::str::from_utf8(b).unwrap();
 
@@ -575,8 +523,10 @@ mod tests {
                         );
 
                         let result = bitwise_results[0][0] as i32;
-                        let reference_uncut =
-                            _levenshtein(std::str::from_utf8(a_strs[0]).unwrap(), b_str) as i32;
+                        let reference_uncut = _naive_levenshtein_1_on_1(
+                            std::str::from_utf8(a_strs[0]).unwrap(),
+                            b_str,
+                        ) as i32;
                         let reference = reference_uncut.min(max_dist + 1);
                         assert_eq!(result, reference, "|{}| |{}| {}", a_str, b_str, max_dist);
                     }

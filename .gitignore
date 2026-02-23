@@ -1,4 +1,3 @@
-```ignore
 # Python
 __pycache__/
 *.py[cod]
@@ -35,4 +34,8 @@ gen/
 
 # VS Code
 .vscode/
-```
+
+.mypy_cache
+.pytest_cache
+
+.personal

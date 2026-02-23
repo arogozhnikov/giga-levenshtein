@@ -1,4 +1,5 @@
 #![feature(portable_simd)]
+#![feature(generic_const_exprs)]
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use rand::rngs::StdRng;
@@ -7,7 +8,7 @@ use rand::{Rng, SeedableRng};
 use rust_levenshtein::levenshtein_bytes;
 use rust_levenshtein::simd::{
     bitty_levenshtein_n_by_1, bitty_levenshtein_simd_by_1_limited,
-    bitty_levenshtein_simd_by_n_limited, levenshtein_n_by_1,
+    bitty_levenshtein_simd_by_n_limited,
 };
 
 const N_SEQUENCE_OPTIONS: &[usize] = &[256usize];
@@ -28,7 +29,7 @@ fn random_byte_seqs_range(
     max_len: usize,
 ) -> Vec<Vec<u8>> {
     (0..count)
-        .map(|_| random_byte_seq(rng, rng.gen_range(min_len..=max_len)))
+        .map(|_| random_byte_seq(&mut rng.clone(), rng.gen_range(min_len..=max_len)))
         .collect()
 }
 
@@ -57,29 +58,6 @@ fn bench_scalar_1_to_n(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_simd_1_to_n(c: &mut Criterion) {
-    let mut group = c.benchmark_group("simd_dp_1_to_n");
-    let seed: u64 = 42;
-
-    for &n_seqs in N_SEQUENCE_OPTIONS {
-        for &seq_len in SEQ_LEN_OPTIONS {
-            let mut rng = StdRng::seed_from_u64(seed);
-            let query = random_byte_seq(&mut rng, seq_len);
-            let targets = random_byte_seqs(&mut rng, n_seqs, seq_len);
-
-            let param = format!("seqs={n_seqs}_len={seq_len}");
-            group.bench_function(BenchmarkId::new("simd_dp", &param), |b| {
-                b.iter(|| {
-                    let slices: Vec<&[u8]> = targets.iter().map(|t| t.as_slice()).collect();
-                    let results = levenshtein_n_by_1(black_box(slices), black_box(&query));
-                    black_box(results);
-                })
-            });
-        }
-    }
-    group.finish();
-}
-
 fn bench_bitty_simd_1_to_n(c: &mut Criterion) {
     let mut group = c.benchmark_group("bitty_simd_1_to_n");
     let seed: u64 = 42;
@@ -94,7 +72,7 @@ fn bench_bitty_simd_1_to_n(c: &mut Criterion) {
             group.bench_function(BenchmarkId::new("bitty_simd", &param), |b| {
                 b.iter(|| {
                     let slices: Vec<&[u8]> = targets.iter().map(|t| t.as_slice()).collect();
-                    let results = bitty_levenshtein_n_by_1(black_box(slices), black_box(&query));
+                    let results = bitty_levenshtein_n_by_1(black_box(&slices), black_box(&query));
                     black_box(results);
                 })
             });
@@ -124,7 +102,7 @@ fn bench_bitty_simd_limited_1_to_n(c: &mut Criterion) {
                         for chunk in slices.chunks(128) {
                             if chunk.len() == 128 {
                                 let arr: &[&[u8]; 128] = chunk.try_into().unwrap();
-                                let results = bitty_levenshtein_simd_by_1_limited::<16, 128>(
+                                let results = bitty_levenshtein_simd_by_1_limited::<128>(
                                     black_box(arr),
                                     black_box(&query),
                                     black_box(max_dist),
@@ -163,13 +141,11 @@ fn bench_bitty_simd_limited_m_to_n(c: &mut Criterion) {
                         for q_chunk in queries.chunks(CHUNK_SIZE) {
                             if q_chunk.len() == CHUNK_SIZE {
                                 let q_arr: &[&[u8]; CHUNK_SIZE] = q_chunk.try_into().unwrap();
-                                let results =
-                                    bitty_levenshtein_simd_by_n_limited::<
-                                        { CHUNK_SIZE / 8 },
-                                        CHUNK_SIZE,
-                                    >(
-                                        black_box(q_arr), black_box(&targets), black_box(max_dist)
-                                    );
+                                let results = bitty_levenshtein_simd_by_n_limited::<CHUNK_SIZE>(
+                                    black_box(q_arr),
+                                    black_box(&targets),
+                                    black_box(max_dist),
+                                );
                                 all_results.extend_from_slice(&results);
                             }
                         }
@@ -185,7 +161,6 @@ fn bench_bitty_simd_limited_m_to_n(c: &mut Criterion) {
 criterion_group!(
     benches,
     bench_scalar_1_to_n,
-    bench_simd_1_to_n,
     bench_bitty_simd_1_to_n,
     bench_bitty_simd_limited_1_to_n,
     bench_bitty_simd_limited_m_to_n,

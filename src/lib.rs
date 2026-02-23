@@ -1,4 +1,5 @@
 #![feature(portable_simd)]
+#![feature(generic_const_exprs)]
 
 #[cfg(feature = "python")]
 use {
@@ -129,10 +130,11 @@ fn compute_levenshtein_m_to_n<'py>(
                 chunk_arr[k] = padding_slice;
             }
 
-            let chunk_res = levenshtein_simd::bitty_levenshtein_simd_by_n_limited::<
-                { CHUNK_SIZE / 8 },
-                CHUNK_SIZE,
-            >(&chunk_arr, &rights, max_dist as usize);
+            let chunk_res = levenshtein_simd::bitty_levenshtein_simd_by_n_limited::<CHUNK_SIZE>(
+                &chunk_arr,
+                &rights,
+                max_dist as usize,
+            );
 
             for k in 0..chunk_len {
                 result_indexed[chunk[k]] =

@@ -71,7 +71,7 @@ fn _bitty_levenshtein_1_on_1(a: &[u8], b: &[u8]) -> u8 {
 
 type Bits<const N: usize> = Simd<u8, { N / 8 }>;
 
-pub fn bitty_levenshtein_simd_by_1<const M: usize>(a: &[&[u8]; M], b: &[u8]) -> [u8; M]
+fn _bitty_levenshtein_simd_by_1<const M: usize>(a: &[&[u8]; M], b: &[u8]) -> [u8; M]
 where
     [(); M / 8]:,
 {
@@ -260,6 +260,21 @@ where
         return res;
     }
 
+    let present_chars = {
+        let mut char_is_present_in_b = [false; 256];
+        for bseq in b {
+            for &c in *bseq {
+                char_is_present_in_b[c as usize] = true;
+            }
+        }
+        char_is_present_in_b
+            .iter()
+            .enumerate()
+            .filter(|(_, &present)| present)
+            .map(|(c, _)| c)
+            .collect::<Vec<usize>>()
+    };
+
     // myers-style algo
     let mut rows_hp = vec![vec![Bits::<M>::splat(255); blen]; b.len()];
     let mut rows_hn = vec![vec![Bits::<M>::splat(0); blen]; b.len()];
@@ -274,7 +289,7 @@ where
                     0
                 }
             }));
-            for c in 0..256 {
+            for &c in present_chars.iter() {
                 is_matches[c] |= ca_shift
                     .simd_eq(Bits::<M>::splat(c as u8))
                     .select(Bits::<M>::splat(1 << shift), Bits::<M>::splat(0));
@@ -291,7 +306,7 @@ where
                 }
             }));
         }
-        for c in 0..256 {
+        for &c in present_chars.iter() {
             is_matches[c] &= mask;
         }
 
@@ -368,7 +383,7 @@ pub fn bitty_levenshtein_n_by_1(a: &Vec<&[u8]>, b: &[u8]) -> Vec<u8> {
     (*a).chunks(CHUNK_SIZE)
         .flat_map(|chunk| {
             if chunk.len() == CHUNK_SIZE {
-                bitty_levenshtein_simd_by_1::<CHUNK_SIZE>(chunk.try_into().unwrap(), b).to_vec()
+                _bitty_levenshtein_simd_by_1::<CHUNK_SIZE>(chunk.try_into().unwrap(), b).to_vec()
             } else {
                 panic!("chunk len is not {CHUNK_SIZE}",);
             }
@@ -430,7 +445,7 @@ mod tests {
                 let input: [&[u8]; 256] =
                     std::array::from_fn(|s| if s % 13 != 0 { *a } else { consts[(*a).len()] });
 
-                let bitwise_results = bitty_levenshtein_simd_by_1::<256>(&input, b);
+                let bitwise_results = _bitty_levenshtein_simd_by_1::<256>(&input, b);
                 for (i, res) in bitwise_results.into_iter().enumerate() {
                     let reference =
                         _naive_levenshtein_1_on_1(std::str::from_utf8(input[i]).unwrap(), b_str)

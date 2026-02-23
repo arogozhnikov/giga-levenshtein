@@ -7,26 +7,6 @@ from dataclasses import dataclass
 import rust_levenshtein
 
 
-def naive_py_levenshtein(a: bytes, b: bytes) -> int:
-    m, n = len(a), len(b)
-    if m == 0:
-        return n
-    if n == 0:
-        return m
-    if m < n:
-        a, b = b, a
-        m, n = n, m
-    prev = list(range(n + 1))
-    curr = [0] * (n + 1)
-    for i in range(1, m + 1):
-        curr[0] = i
-        for j in range(1, n + 1):
-            cost = 0 if a[i - 1] == b[j - 1] else 1
-            curr[j] = min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
-        prev, curr = curr, prev
-    return prev[n]
-
-
 def py_1_to_n(
     left: bytes, right: list[str], dist_func: Callable[[str, str], int]
 ) -> list[int]:
@@ -75,28 +55,6 @@ def _timeit(fn, *args, repeats: int = 3) -> float:
 # ---------------------------------------------------------------------------
 
 
-def bench_1_to_n(
-    n: int, str_len: int, dist_func: Callable[[str, str], int]
-) -> BenchResult:
-    left = random_bytes(str_len)
-    right = [random_bytes(str_len) for _ in range(n)]
-
-    py_ms = _timeit(py_1_to_n, left, right, dist_func)
-    rs_ms = _timeit(rust_levenshtein.compute_levenshtein_1_to_n_bytes, left, right)
-    return BenchResult(f"1_to_{n}  (strlen={str_len})", py_ms, rs_ms)
-
-
-def bench_1_to_n_simd(
-    n: int, str_len: int, dist_func: Callable[[str, str], int]
-) -> BenchResult:
-    left = random_bytes(str_len)
-    right = [random_bytes(str_len) for _ in range(n)]
-
-    py_ms = _timeit(py_1_to_n, left, right, dist_func)
-    rs_ms = _timeit(rust_levenshtein.compute_levenshtein_1_to_n_bytes_simd, left, right)
-    return BenchResult(f"1_to_{n}  (strlen={str_len})", py_ms, rs_ms)
-
-
 def bench_1_to_n_bitty_simd(
     n: int, str_len: int, dist_func: Callable[[str, str], int]
 ) -> BenchResult:
@@ -106,9 +64,7 @@ def bench_1_to_n_bitty_simd(
     right = [random_bytes(str_len) for _ in range(n)]
 
     py_ms = _timeit(py_1_to_n, left, right, dist_func)
-    rs_ms = _timeit(
-        rust_levenshtein.compute_levenshtein_1_to_n_bytes_bitty_simd, left, right
-    )
+    rs_ms = _timeit(rust_levenshtein.compute_levenshtein_1_to_n_bitty_simd, left, right)
     return BenchResult(f"1_to_{n}  (strlen={str_len})", py_ms, rs_ms)
 
 
@@ -126,10 +82,13 @@ def bench_m_to_n(
 def main(
     sizes: list[int] = [32, 64, 256],
     str_lens: list[int] = [16, 64, 256, 1024],
-    baseline: Literal["plain_python", "python_levenshtein"] = "python_levenshtein",
+    baseline: Literal["polyleven", "python_levenshtein"] = "python_levenshtein",
 ):
-    if baseline == "plain_python":
-        dist_func = naive_py_levenshtein
+    if baseline == "polyleven":
+        # poor baseline, and polyleven accepts only strings
+        import polyleven
+
+        dist_func = lambda x, y: polyleven.levenshtein(x.decode(), y.decode())
     else:
         import Levenshtein
 
@@ -141,20 +100,6 @@ def main(
     print("=" * 90)
     print(f" rust_levenshtein benchmarks (baseline: {baseline})")
     print("=" * 90)
-
-    print("\n### compute_levenshtein_1_to_n ###\n")
-    for n in sizes:
-        for sl in str_lens:
-            r = bench_1_to_n(n, sl, dist_func)
-            results.append(r)
-            print(r)
-
-    print("\n### compute_levenshtein_1_to_n_simd ###\n")
-    for n in sizes:
-        for sl in str_lens:
-            r = bench_1_to_n_simd(n, sl, dist_func)
-            results.append(r)
-            print(r)
 
     print("\n### compute_levenshtein_1_to_n_bitty_simd ###\n")
     # bitty_simd requires multiples of 128

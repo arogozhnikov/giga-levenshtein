@@ -34,34 +34,6 @@ class TestComputeLevenshtein1ToNBytes:
         assert result[0] > 0  # different (é vs e)
 
 
-class TestComputeLevenshtein1ToNBytesSIMD:
-    def test_basic(self):
-        # Current SIMD implementation requires exactly 32 elements (or multiples of 32)
-        right = [b"sittin", b"kitten", b"mitten"] + [b"abcabc"] * 29
-        result = rust_levenshtein.compute_levenshtein_1_to_n_simd(b"kitten", right)
-        assert result[:3] == [2, 0, 1], result
-        assert len(result) == 32
-
-    def test_unicode_as_bytes(self):
-        right = [
-            "cafe",
-            "café",
-            "caff",
-        ] + [""] * 29
-
-        def pad_encode(x: str):
-            y = x.encode("utf-8")
-            return y + b" " * (19 - len(y))
-
-        right = [pad_encode(x) for x in right]
-
-        result = rust_levenshtein.compute_levenshtein_1_to_n_simd(
-            pad_encode("café"), right
-        )
-        assert result[1] == 0  # identical
-        assert len(result) == 32
-
-
 class TestComputeLevenshtein1ToNBytesBittySIMD:
     def test_basic(self):
         # Bitty SIMD implementation requires exactly 256 elements (or multiples of 256)

@@ -1,6 +1,5 @@
-def compute_levenshtein_1_to_n(left: bytes, right: list[bytes]) -> list[int]: ...
-def compute_levenshtein_1_to_n_bitty_simd(
-    left: bytes, right: list[bytes]
+def compute_levenshtein_1_to_n(
+    left: bytes, right: list[bytes], max_dist: int = 254
 ) -> list[int]: ...
 def compute_levenshtein_m_to_n(
     left: list[bytes], right: list[bytes], max_dist: int = 254

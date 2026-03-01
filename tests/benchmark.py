@@ -1,4 +1,4 @@
-from typing import Literal, Callable
+from typing import Callable
 import random
 
 import time
@@ -64,7 +64,7 @@ def bench_1_to_n_bitty_simd(
     right = [random_bytes(str_len) for _ in range(n)]
 
     py_ms = _timeit(py_1_to_n, left, right, dist_func)
-    rs_ms = _timeit(rust_levenshtein.compute_levenshtein_1_to_n_bitty_simd, left, right)
+    rs_ms = _timeit(rust_levenshtein.compute_levenshtein_1_to_n, left, right)
     return BenchResult(f"1_to_{n}  (strlen={str_len})", py_ms, rs_ms)
 
 
@@ -82,26 +82,19 @@ def bench_m_to_n(
 def main(
     sizes: list[int] = [32, 64, 256],
     str_lens: list[int] = [16, 64, 256, 1024],
-    baseline: Literal["polyleven", "python_levenshtein"] = "python_levenshtein",
 ):
-    if baseline == "polyleven":
-        # poor baseline, and polyleven accepts only strings
-        import polyleven
+    import Levenshtein
 
-        dist_func = lambda x, y: polyleven.levenshtein(x.decode(), y.decode())
-    else:
-        import Levenshtein
-
-        dist_func = Levenshtein.distance
+    dist_func = Levenshtein.distance
 
     random.seed(42)
     results: list[BenchResult] = []
 
     print("=" * 90)
-    print(f" rust_levenshtein benchmarks (baseline: {baseline})")
+    print("rust_levenshtein benchmarks")
     print("=" * 90)
 
-    print("\n### compute_levenshtein_1_to_n_bitty_simd ###\n")
+    print("\n### compute_levenshtein_1_to_n ###\n")
     # bitty_simd requires multiples of 128
     bitty_sizes = [128, 256]
     for n in bitty_sizes:

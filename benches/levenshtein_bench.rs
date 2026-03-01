@@ -1,11 +1,12 @@
 #![feature(portable_simd)]
 #![feature(generic_const_exprs)]
 
+// rust-side benches are a bit more precise and bypass python <> rust overhead
+
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
-use rust_levenshtein::levenshtein_bytes;
 use rust_levenshtein::simd::{
     bitty_levenshtein_n_by_1, bitty_levenshtein_simd_by_1_limited,
     bitty_levenshtein_simd_by_n_limited,
@@ -48,7 +49,7 @@ fn bench_scalar_1_to_n(c: &mut Criterion) {
                 b.iter(|| {
                     let results: Vec<usize> = targets
                         .iter()
-                        .map(|t| levenshtein_bytes(black_box(&query), black_box(t.as_slice())))
+                        .map(|t| levenshtein_naive(black_box(&query), black_box(t.as_slice())))
                         .collect();
                     black_box(results);
                 })
@@ -56,6 +57,38 @@ fn bench_scalar_1_to_n(c: &mut Criterion) {
         }
     }
     group.finish();
+}
+
+fn levenshtein_naive(a: &[u8], b: &[u8]) -> usize {
+    let m = a.len();
+    let n = b.len();
+
+    if m == 0 {
+        return n;
+    }
+    if n == 0 {
+        return m;
+    }
+
+    // Ensure we iterate over the shorter dimension for memory efficiency.
+    if m < n {
+        return levenshtein_naive(b, a);
+    }
+
+    // `prev` holds the previous row of the DP matrix.
+    let mut prev: Vec<usize> = (0..=n).collect();
+    let mut curr: Vec<usize> = vec![0; n + 1];
+
+    for i in 1..=m {
+        curr[0] = i;
+        for j in 1..=n {
+            let cost = if a[i - 1] == b[j - 1] { 0 } else { 1 };
+            curr[j] = (prev[j] + 1).min(curr[j - 1] + 1).min(prev[j - 1] + cost);
+        }
+        std::mem::swap(&mut prev, &mut curr);
+    }
+
+    prev[n]
 }
 
 fn bench_bitty_simd_1_to_n(c: &mut Criterion) {
@@ -98,7 +131,7 @@ fn bench_bitty_simd_limited_1_to_n(c: &mut Criterion) {
                 group.bench_function(BenchmarkId::new("bitty_limited", &param), |b| {
                     b.iter(|| {
                         let slices: Vec<&[u8]> = targets.iter().map(|t| t.as_slice()).collect();
-                        let mut all_results: Vec<u8> = Vec::with_capacity(n_seqs);
+                        let mut all_results: Vec<i32> = Vec::with_capacity(n_seqs);
                         for chunk in slices.chunks(128) {
                             if chunk.len() == 128 {
                                 let arr: &[&[u8]; 128] = chunk.try_into().unwrap();

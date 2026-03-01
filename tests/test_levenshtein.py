@@ -8,6 +8,12 @@ class TestComputeLevenshtein1ToNBytes:
         )
         assert result == [3, 0, 1]
 
+        # Bitty SIMD implementation requires exactly 256 elements (or multiples of 256)
+        right = [b"sittin", b"kitten", b"mitten"] + [b"abcabc"] * 253
+        result = rust_levenshtein.compute_levenshtein_1_to_n(b"kitten", right)
+        assert result[:3] == [2, 0, 1], result
+        assert len(result) == 256
+
     def test_empty_left(self):
         result = rust_levenshtein.compute_levenshtein_1_to_n(
             b"", [b"abc", b"", b"hello"]
@@ -32,17 +38,6 @@ class TestComputeLevenshtein1ToNBytes:
         )
         assert result[1] == 0  # identical
         assert result[0] > 0  # different (é vs e)
-
-
-class TestComputeLevenshtein1ToNBytesBittySIMD:
-    def test_basic(self):
-        # Bitty SIMD implementation requires exactly 256 elements (or multiples of 256)
-        right = [b"sittin", b"kitten", b"mitten"] + [b"abcabc"] * 253
-        result = rust_levenshtein.compute_levenshtein_1_to_n_bitty_simd(
-            b"kitten", right
-        )
-        assert result[:3] == [2, 0, 1], result
-        assert len(result) == 256
 
 
 class TestComputeLevenshteinMToNBytes:

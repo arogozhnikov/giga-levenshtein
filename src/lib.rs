@@ -10,7 +10,8 @@ use {
 
 pub mod simd;
 
-/// Compute Levenshtein distances from one byte slice to a list of byte slices using Bitty SIMD.
+/// Compute Levenshtein distances from a single byte-slice to a list of byte-slices.
+/// result[i] = levenshtein(left, right[i])
 #[cfg(feature = "python")]
 #[pyfunction]
 #[pyo3(signature = (left, right, max_dist=254))]
@@ -37,6 +38,7 @@ fn compute_levenshtein_1_to_n<'py>(
 }
 
 /// Compute Levenshtein distances from each byte slice in `left` to each byte slice in `right`.
+/// result[i][j] = levenshtein(left[i], right[j])
 #[cfg(feature = "python")]
 #[pyfunction]
 #[pyo3(signature = (left, right, max_dist=254))]

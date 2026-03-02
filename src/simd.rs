@@ -18,12 +18,12 @@ fn _naive_levenshtein_1_on_1(a: &[u8], b: &[u8]) -> i32 {
 
 /// bitty: myers-style algo
 /// this is "simplified reference" for following implementations
-fn _bitty_levenshtein_1_on_1(a: &[u8], b: &[u8]) -> u8 {
+fn _bitty_levenshtein_1_on_1(a: &[u8], b: &[u8]) -> i32 {
     if b.len() == 0 {
-        return a.len() as u8;
+        return a.len() as i32;
     };
     if a.len() == 0 {
-        return b.len() as u8;
+        return b.len() as i32;
     }
     let n = b.len();
     let mut prev_hp = vec![true; n]; // all 1
@@ -66,12 +66,12 @@ fn _bitty_levenshtein_1_on_1(a: &[u8], b: &[u8]) -> u8 {
 
     let result = (a.len() as i32) + curr_hp.iter().map(|x| *x as i32).sum::<i32>()
         - curr_hn.iter().map(|x| *x as i32).sum::<i32>();
-    result as u8
+    result as i32
 }
 
 type Bits<const N: usize> = Simd<u8, { N / 8 }>;
 
-fn _bitty_levenshtein_simd_by_1<const M: usize>(a: &[&[u8]; M], b: &[u8]) -> [u8; M]
+fn _bitty_levenshtein_simd_by_1<const M: usize>(a: &[&[u8]; M], b: &[u8]) -> [i32; M]
 where
     [(); M / 8]:,
 {
@@ -79,10 +79,10 @@ where
     let (alen, blen) = (a[0].len(), b.len());
 
     if blen == 0 {
-        return [alen as u8; M];
+        return [alen as i32; M];
     };
     if alen == 0 {
-        return [blen as u8; M];
+        return [blen as i32; M];
     }
 
     // myers-style algo
@@ -133,17 +133,10 @@ where
         }
     }
 
-    let one = Bits::<M>::splat(1);
-    let mut result = [0u8; M];
-    for shift in 0..8 {
-        let result_for_shift: Bits<M> = Bits::<M>::splat(alen as u8)
-            + curr_hp.iter().map(|x| (*x >> shift) & one).sum::<Bits<M>>()
-            - curr_hn.iter().map(|x| (*x >> shift) & one).sum::<Bits<M>>();
+    let mut result = [alen as i32; M];
 
-        for s in 0..(M / 8) {
-            result[shift as usize + s * 8] = result_for_shift[s];
-        }
-    }
+    sum_masks(&curr_hp, &mut result, true);
+    sum_masks(&curr_hn, &mut result, false);
 
     result
 }
@@ -179,16 +172,16 @@ where
 {
     // assumes all lengths are identical, does not check this right now
     // remark: pre-computing is_match is slower if max_dist is smaller than dictionary
-    let (alen, blen) = (a.iter().map(|x| x.len()).max().unwrap_or(0), b.len());
+    let (alen, max_blen) = (a.iter().map(|x| x.len()).max().unwrap_or(0), b.len());
     assert!(max_dist <= 254);
     // assert!((alen + max_dist < blen) && (blen + max_dist < alen));
 
     let maxval = (max_dist + 1) as i32;
-    if blen == 0 {
+    if max_blen == 0 {
         return std::array::from_fn(|i| (a[i].len() as i32).min(maxval));
     };
     if alen == 0 {
-        return [(blen as i32).min(maxval); M];
+        return [(max_blen as i32).min(maxval); M];
     }
     let pad_sizes: [usize; M] = std::array::from_fn(|i| alen - a[i].len());
     let padded_a: [&[u8]; M] = std::array::from_fn(|i| {
@@ -198,8 +191,8 @@ where
     });
 
     // myers-style algo
-    let mut row_hp = vec![Bits::<M>::splat(255); blen];
-    let mut row_hn = vec![Bits::<M>::splat(0); blen];
+    let mut row_hp = vec![Bits::<M>::splat(255); max_blen];
+    let mut row_hn = vec![Bits::<M>::splat(0); max_blen];
 
     for i in 0..alen {
         let c_a: [Bits<M>; 8] = std::array::from_fn(|shift| {
@@ -220,8 +213,9 @@ where
             mask
         };
 
-        let lo = (i as i32 + blen as i32 - alen as i32 - max_dist as i32).max(0) as usize;
-        let hi = ((i as i32 + max_dist as i32 + 1 + blen as i32 - alen as i32) as usize).min(blen);
+        let lo = (i as i32 + max_blen as i32 - alen as i32 - max_dist as i32).max(0) as usize;
+        let hi = ((i as i32 + max_dist as i32 + 1 + max_blen as i32 - alen as i32) as usize)
+            .min(max_blen);
 
         let mut prev_hp_j = mask_is_pad;
         let mut prev_hn_j = !mask_is_pad;
@@ -248,7 +242,7 @@ where
             let curr_vn_j = prev_hp_jm1 & curr_dz_j_m1; // res < 0
 
             // curr_d[j], before we used previous variable
-            curr_dz_j = prev_hn_j | curr_vn_j | mask_is_pad | is_match;
+            curr_dz_j = prev_hn_j | curr_vn_j | is_match;
 
             // curr_h[j] = curr_d[j] - curr_v[j]
             // res := curr_dp[j] - curr_vp[j] + curr_vn[j];
@@ -275,10 +269,9 @@ pub fn bitty_levenshtein_simd_by_n_limited<const M: usize>(
 where
     [(); M / 8]:,
 {
-    assert!(max_dist <= 254);
-
     let alen = a.iter().map(|x| x.len()).max().unwrap_or(0);
     let blen = b.iter().map(|x| x.len()).max().unwrap_or(0);
+    let pad_sizes: [usize; M] = std::array::from_fn(|i| alen - a[i].len());
 
     let maxval = (max_dist + 1) as i32;
     if blen == 0 {
@@ -315,12 +308,14 @@ where
 
     for i in 0..alen {
         let mut is_matches = [Bits::<M>::splat(0); 256];
+
         for shift in 0..8 {
             let ca_shift = Bits::<M>::from_array(std::array::from_fn(|s| {
-                if i < a[shift + 8 * s].len() {
-                    a[shift + 8 * s][i]
-                } else {
+                let pad_size = pad_sizes[shift + 8 * s];
+                if i < pad_size {
                     0
+                } else {
+                    a[shift + 8 * s][i - pad_size]
                 }
             }));
             for &c in present_chars.iter() {
@@ -330,32 +325,33 @@ where
             }
         }
 
-        let mut mask = Bits::<M>::splat(0);
-        for shift in 0..8 {
-            mask |= Bits::<M>::from_array(std::array::from_fn(|s| {
-                if i < a[shift + 8 * s].len() {
-                    1u8 << shift
-                } else {
-                    0u8
-                }
-            }));
-        }
-        for &c in present_chars.iter() {
-            is_matches[c] &= mask;
-        }
-
-        let lo = i.saturating_sub(max_dist);
-        let hi = (i + max_dist + 1).min(blen);
+        let mask_is_pad = {
+            let mut mask = Bits::<M>::splat(0u8);
+            for shift in 0..8 {
+                mask |= Bits::<M>::from_array(std::array::from_fn(|s| {
+                    if i < pad_sizes[shift + 8 * s] {
+                        1u8 << shift
+                    } else {
+                        0u8
+                    }
+                }));
+            }
+            mask
+        };
 
         for (bseq_id, bseq) in b.iter().enumerate() {
             let row_hp = &mut rows_hp[bseq_id];
             let row_hn = &mut rows_hn[bseq_id];
 
-            let mut prev_hp_j = Bits::<M>::splat(0);
-            let mut prev_hn_j = Bits::<M>::splat(255);
-            let mut curr_dnp_j = Bits::<M>::splat(255);
+            let mut prev_hp_j = mask_is_pad;
+            let mut prev_hn_j = !mask_is_pad;
+            let mut curr_dz_j = Bits::<M>::splat(255);
 
-            for j in lo..hi.min(bseq.len()) {
+            let lo = (i as i32 + bseq.len() as i32 - alen as i32 - max_dist as i32).max(0) as usize;
+            let hi = ((i as i32 + max_dist as i32 + 1 + bseq.len() as i32 - alen as i32) as usize)
+                .min(bseq.len());
+
+            for j in lo..hi {
                 let prev_hp_jm1 = prev_hp_j;
                 let prev_hn_jm1 = prev_hn_j;
                 prev_hp_j = row_hp[j];
@@ -364,45 +360,38 @@ where
                 let is_match = is_matches[bseq[j] as usize];
                 // curr_d[j - i] = prev_h[ j - 1 ] + curr_v [ j ]
                 // res := curr_dp[j - 1] - prev_hp[j - 1] + prev_hn[j - 1];
-                let curr_dnp_j_m1 = curr_dnp_j;
-                let curr_vp_j = prev_hn_jm1 | !(curr_dnp_j_m1 | prev_hp_jm1); // res > 0
-                let curr_vn_j = prev_hp_jm1 & curr_dnp_j_m1; // res < 0
+                let curr_dz_j_m1 = curr_dz_j;
+                let curr_vp_j = prev_hn_jm1 | !(curr_dz_j_m1 | prev_hp_jm1); // res > 0
+                let curr_vn_j = prev_hp_jm1 & curr_dz_j_m1; // res < 0
 
                 // curr_d[j], before we used previous variable
-                curr_dnp_j = prev_hn_j | curr_vn_j | is_match;
+                curr_dz_j = prev_hn_j | curr_vn_j | is_match;
 
                 // curr_h[j] = curr_d[j] - curr_v[j]
                 // res := curr_dp[j] - curr_vp[j] + curr_vn[j];
-                row_hp[j] = !(curr_dnp_j | curr_vp_j) | curr_vn_j; // res > 0
-                row_hn[j] = curr_vp_j & curr_dnp_j; // res < 0
+                row_hp[j] = !(curr_dz_j | curr_vp_j) | curr_vn_j; // res > 0
+                row_hn[j] = curr_vp_j & curr_dz_j; // res < 0
             }
         }
     }
 
-    let one = Bits::<M>::splat(1);
     let mut result = vec![vec![0i32; b.len()]; a.len()];
 
     let maxval = (max_dist + 1) as i32;
 
-    for shift in 0..8 {
-        for j in 0..b.len() {
-            let result_for_shift: Bits<M> = Bits::<M>::splat(alen as u8)
-                + rows_hp[j]
-                    .iter()
-                    .map(|x| (*x >> shift) & one)
-                    .sum::<Bits<M>>()
-                - rows_hn[j]
-                    .iter()
-                    .map(|x| (*x >> shift) & one)
-                    .sum::<Bits<M>>();
+    for j in 0..b.len() {
+        if b[j].len() == 0 {
+            for i in 0..a.len() {
+                result[i][j] = (a[i].len() as i32).min(maxval);
+            }
+        } else {
+            let mut result_j = [0i32; M];
 
-            for s in 0..(M / 8) {
-                let i = shift as usize + s * 8;
-                let uncomp_distance = result_for_shift[s] as i32;
+            sum_masks(&rows_hp[j][..b[j].len()], &mut result_j, true);
+            sum_masks(&rows_hn[j][..b[j].len()], &mut result_j, false);
 
-                result[i][j] = (uncomp_distance
-                    - (alen - a[i].len()).max(blen - b[j].len()) as i32)
-                    .min(maxval);
+            for (i, &res) in result_j.iter().enumerate() {
+                result[i][j] = (res + a[i].len() as i32).min(maxval);
             }
         }
     }
@@ -410,7 +399,7 @@ where
     result
 }
 
-pub fn bitty_levenshtein_n_by_1(a: &Vec<&[u8]>, b: &[u8]) -> Vec<u8> {
+pub fn bitty_levenshtein_n_by_1(a: &Vec<&[u8]>, b: &[u8]) -> Vec<i32> {
     assert!(!b.contains(&255));
     const CHUNK_SIZE: usize = 256;
 
@@ -483,7 +472,7 @@ mod tests {
     }
 
     #[test]
-    fn stress_test_bitty_simd_1_to_n() {
+    fn stress_test_bitty_simd_by_1() {
         let consts: [&[u8]; 5] = [b"", b" ", b"  ", b"   ", b"    "];
         for a in SHORT_TEST_SEQS.iter() {
             for b in SHORT_TEST_SEQS.iter() {
@@ -500,7 +489,7 @@ mod tests {
     }
 
     #[test]
-    fn stress_test_bitty_simd_1_to_n_limited() {
+    fn stress_test_bitty_simd_by_1_limited() {
         for a in get_many_sequences() {
             for b in get_many_sequences() {
                 for max_dist in 0..10i32 {
@@ -519,7 +508,7 @@ mod tests {
     }
 
     #[test]
-    fn stress_test_bitty_simd_1_to_n_limited_mixed_sizes() {
+    fn stress_test_bitty_simd_by_1_limited_mixed_sizes() {
         let all_seqs = get_many_sequences();
 
         for b in all_seqs.iter() {
@@ -547,41 +536,54 @@ mod tests {
     }
 
     #[test]
-    fn stress_test_bitty_simd_to_n_limited() {
-        let max_a_seqs = get_many_sequences();
+    fn stress_test_bitty_simd_by_n_limited() {
+        let source_a_seqs = get_many_sequences();
 
         for max_aseqs in [1, 2, 4, 10, 20] {
             for n_bseqs in [1, 17, 302] {
-                for max_dist in 0..10i32 {
-                    let n_a_seqs = max_aseqs.min(max_a_seqs.len());
-                    let a_strs: [&[u8]; 256] = std::array::from_fn(|i| max_a_seqs[i % n_a_seqs]);
+                for max_blen in [0, 2, 4, 7, 20] {
+                    for max_dist in 0..10i32 {
+                        let n_a_seqs = max_aseqs.min(source_a_seqs.len());
+                        let a_strs: [&[u8]; 256] =
+                            std::array::from_fn(|i| source_a_seqs[i % n_a_seqs]);
+                        // pad all a_strs to same length
+                        let a_strs = if max_blen > 0 {
+                            a_strs.map(|s| {
+                                let mut padded = vec![0u8; max_blen];
+                                let taken_len = max_blen.min(s.len());
+                                padded[..taken_len].copy_from_slice(&s[..taken_len]);
+                                padded.leak() as &[u8]
+                            })
+                        } else {
+                            a_strs
+                        };
 
-                    let b_strs: Vec<&[u8]> = get_many_sequences()
-                        .into_iter()
-                        .cycle()
-                        .take(n_bseqs)
-                        .collect();
+                        let b_strs: Vec<&[u8]> = get_many_sequences()
+                            .into_iter()
+                            .cycle()
+                            .take(n_bseqs)
+                            .collect();
 
-                    let bitwise_results = bitty_levenshtein_simd_by_n_limited::<256>(
-                        &a_strs,
-                        &b_strs,
-                        max_dist as usize,
-                    );
+                        let bitwise_results = bitty_levenshtein_simd_by_n_limited::<256>(
+                            &a_strs,
+                            &b_strs,
+                            max_dist as usize,
+                        );
 
-                    for (i, res) in bitwise_results.iter().enumerate() {
-                        for (j, &b_str) in b_strs.iter().enumerate() {
-                            let reference_uncut =
-                                _naive_levenshtein_1_on_1(a_strs[i], b_str) as i32;
-                            let reference = reference_uncut.min(max_dist + 1);
+                        for (i, res) in bitwise_results.iter().enumerate() {
+                            for (j, &b_str) in b_strs.iter().enumerate() {
+                                let reference_uncut =
+                                    _naive_levenshtein_1_on_1(a_strs[i], b_str) as i32;
+                                let reference = reference_uncut.min(max_dist + 1);
 
-                            assert_eq!(
-                                (*res)[j] as i32,
-                                reference,
-                                "|{:?}| |{:?}| {} dist={max_dist}",
-                                a_strs[i],
-                                b_str,
-                                b_str.len()
-                            );
+                                assert_eq!(
+                                    (*res)[j] as i32,
+                                    reference,
+                                    "|{:?}| |{b_str:?}| {} dist={max_dist}",
+                                    a_strs[i],
+                                    b_str.len(),
+                                );
+                            }
                         }
                     }
                 }

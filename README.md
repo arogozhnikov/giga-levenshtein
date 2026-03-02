@@ -28,6 +28,7 @@ Tools:
 - `cargo test`
 - `cargo bench` - rust-side benchmarks
 - `pip install -e . && python './tests/benchmark.py'` - benchmarks for python wrapper
+- you may also need `pip install maturin`
 
 
 In case of breaking changes (portable_simd is unstable, and API *does* change), I used 
@@ -45,6 +46,7 @@ Some TODOs:
 3. support switch between 128/256/512-but wide SIMD
 4. smart batching on length
 5. prepare relevant benchmark + test this on Intel's AVX512
+6. uint64-only implementation for comparison; it is possible that proper simd-ification can be done automatically.
 
 
 

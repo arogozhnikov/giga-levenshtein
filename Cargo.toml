@@ -1,10 +1,10 @@
 [package]
-name = "rust_levenshtein"
+name = "giga_levenshtein"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "rust_levenshtein"
+name = "giga_levenshtein"
 crate-type = ["cdylib", "rlib"]
 
 [features]

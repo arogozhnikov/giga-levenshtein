@@ -7,7 +7,7 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
-use rust_levenshtein::simd::{
+use giga_levenshtein::simd::{
     bitty_levenshtein_n_by_1, bitty_levenshtein_simd_by_1_limited,
     bitty_levenshtein_simd_by_n_limited,
 };

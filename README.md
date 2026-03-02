@@ -27,7 +27,7 @@ Tools:
 
 - `cargo test`
 - `cargo bench` - rust-side benchmarks
-- `pip install -e . && python '/Users/alex/projects/rust-levenshtein/tests/benchmark.py'` - benchmarks for python wrapper
+- `pip install -e . && python './tests/benchmark.py'` - benchmarks for python wrapper
 
 
 In case of breaking changes (portable_simd is unstable, and API *does* change), I used 

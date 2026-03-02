@@ -3,7 +3,7 @@ import random
 import time
 from dataclasses import dataclass
 
-import rust_levenshtein
+import giga_levenshtein
 
 import Levenshtein
 
@@ -61,7 +61,7 @@ def bench_1_to_n_bitty_simd(n: int, str_len: int) -> BenchResult:
     right = [random_bytes(str_len) for _ in range(n)]
 
     py_ms = _timeit(py_1_to_n, left, right)
-    rs_ms = _timeit(rust_levenshtein.compute_levenshtein_1_to_n, left, right)
+    rs_ms = _timeit(giga_levenshtein.compute_levenshtein_1_to_n, left, right)
     return BenchResult(f"1_to_{n}  (strlen={str_len})", py_ms, rs_ms)
 
 
@@ -70,7 +70,7 @@ def bench_m_to_n(m: int, n: int, str_len: int) -> BenchResult:
     right = [random_bytes(str_len) for _ in range(n)]
 
     py_ms = _timeit(py_m_to_n, left, right)
-    rs_ms = _timeit(rust_levenshtein.compute_levenshtein_m_to_n, left, right)
+    rs_ms = _timeit(giga_levenshtein.compute_levenshtein_m_to_n, left, right)
     return BenchResult(f"{m}_to_{n}  (strlen={str_len})", py_ms, rs_ms)
 
 
@@ -82,7 +82,7 @@ def main(
     results: list[BenchResult] = []
 
     print("=" * 90)
-    print("rust_levenshtein benchmarks")
+    print("giga_levenshtein benchmarks")
     print("=" * 90)
 
     print("\n### compute_levenshtein_1_to_n ###\n")

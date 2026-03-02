@@ -107,7 +107,7 @@ fn compute_levenshtein_m_to_n<'py>(
 
 #[cfg(feature = "python")]
 #[pymodule]
-fn rust_levenshtein(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn giga_levenshtein(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(compute_levenshtein_1_to_n, m)?)?;
     m.add_function(wrap_pyfunction!(compute_levenshtein_m_to_n, m)?)?;
     Ok(())

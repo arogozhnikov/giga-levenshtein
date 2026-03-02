@@ -184,6 +184,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "giga_levenshtein"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "pyo3",
+ "rand",
+]
+
+[[package]]
 name = "half"
 version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -495,15 +504,6 @@ name = "regex-syntax"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a96887878f22d7bad8a3b6dc5b7440e0ada9a245242924394987b21cf2210a4c"
-
-[[package]]
-name = "rust_levenshtein"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "pyo3",
- "rand",
-]
 
 [[package]]
 name = "rustversion"

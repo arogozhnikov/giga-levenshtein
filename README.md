@@ -12,10 +12,13 @@ It was simple 30-40 years ago, but since then all kinds of tricks were invented:
 
 This implementation is going all-in on SIMD.
 
-- 5x-10x faster than `python_levenshtein` on computing massive all-to-all distances.
-- ~ 100x faster than naive DP in rust (still using 1 thread!)
+- ~ 100x faster than naive DP in rust (still using 1 thread)
+- 5x-10x faster than `python_levenshtein` on computing massive all-to-all distances
+  (`python_levenshtein` has impressive performance)
 
 
+
+### Implementation details / dev notes
 
 Implemented in (nightly) rust using portable_simd.
 

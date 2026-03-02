@@ -54,7 +54,7 @@ def _timeit(fn, *args, repeats: int = 3) -> float:
 # ---------------------------------------------------------------------------
 
 
-def bench_1_to_n_bitty_simd(n: int, str_len: int) -> BenchResult:
+def bench_1_to_n(n: int, str_len: int) -> BenchResult:
     left = random_bytes(str_len)
     # n must be a multiple of 128 for bitty_simd
     n = (n // -256) * -256
@@ -90,7 +90,7 @@ def main(
     bitty_sizes = [256]
     for n in bitty_sizes:
         for sl in str_lens:
-            r = bench_1_to_n_bitty_simd(n, sl)
+            r = bench_1_to_n(n, sl)
             results.append(r)
             print(r)
 

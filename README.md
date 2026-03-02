@@ -13,7 +13,7 @@ It was simple 30-40 years ago, but since then all kinds of tricks were invented:
 This implementation is going all-in on SIMD.
 
 - ~ 100x faster than naive DP in rust (still using 1 thread)
-- 5x-10x faster than `python_levenshtein` on computing massive all-to-all distances
+- 5x-8x faster than `python_levenshtein` on computing massive all-to-all distances
   (`python_levenshtein` has impressive performance)
 
 
@@ -25,9 +25,9 @@ Implemented in (nightly) rust using portable_simd.
 
 Tools:
 
-- `cargo test`
-- `cargo bench` - rust-side benchmarks
-- `pip install -e . && python './tests/benchmark.py'` - benchmarks for python wrapper
+- `cargo +nightly test`
+- `cargo +nightly bench` - rust-side benchmarks
+- `RUSTUP_TOOLCHAIN=nightly pip install -e . && python './tests/benchmark.py'` - benchmarks for python wrapper
 - you may also need `pip install maturin`
 
 

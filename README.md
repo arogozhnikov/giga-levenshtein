@@ -10,7 +10,7 @@ It was simple 30-40 years ago, but since then all kinds of tricks were invented:
 - special structures: trees / Levenshtein automaton 
 
 
-This implementation is going all-in on SIMD.
+This implementation is going all-in on SIMD while still using previous tricks.
 
 - ~ 100x faster than naive DP in rust (still using 1 thread)
 - 5x-8x faster than `python_levenshtein` on computing massive all-to-all distances

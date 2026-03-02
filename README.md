@@ -1,20 +1,20 @@
 ## Very fast Levenshtein distance
 
-It is really hard to speed up Levenshtein distance computation. 
+Is it possible to speed up computation for Levenshtein distances? 
 
-It was simple 30-40 years ago, but since then all kinds of tricks were invented:
+Getting speed-ups was simple 30-40 years ago, but since then all kinds of tricks were invented:
 
-- Myers' bit-vector algorithm
 - Ukkonen's banding trick
-- "Four russians" lookups
+- Myers' bit-vector algorithm
+- Method of "Four russians"
 - special structures: trees / Levenshtein automaton 
 
 
-This implementation is going all-in on SIMD while still using previous tricks.
+This implementation is going all-in on SIMD while still combining previous tricks.
 
 - ~ 100x faster than naive DP in rust (still using 1 thread)
 - 5x-8x faster than `python_levenshtein` on computing massive all-to-all distances
-  (`python_levenshtein` has impressive performance)
+  (FYI `python_levenshtein` has impressive performance)
 
 
 
@@ -45,8 +45,9 @@ Some TODOs:
 2. more flexible wrapper
 3. support switch between 128/256/512-but wide SIMD
 4. smart batching on length
-5. prepare relevant benchmark + test this on Intel's AVX512
-6. uint64-only implementation for comparison; it is possible that proper simd-ification can be done automatically.
+5. prepare relevant benchmark
+6. bench on AVX512 - I only tested on processors with 256-bit wide SIMD
+7. uint64-only implementation for comparison; it is possible that proper simd-ification can be done automatically.
 
 
 

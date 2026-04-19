@@ -12,10 +12,11 @@ Getting speed-ups was simple 30-40 years ago, but since then all kinds of tricks
 
 This implementation is going all-in on SIMD while still combining previous tricks.
 
-- ~ 100x faster than naive DP in rust (still using 1 thread)
+- ~ 100x faster than dynamic programming baseline in rust
 - 5x-8x faster than `python_levenshtein` on computing massive all-to-all distances
   (FYI `python_levenshtein` has impressive performance)
 
+And we still use just 1 thread.
 
 
 ### Implementation details / dev notes
@@ -47,7 +48,7 @@ Some TODOs:
 4. smart batching on length
 5. prepare relevant benchmark
 6. bench on AVX512 - I only tested on processors with 256-bit wide SIMD
-7. uint64-only implementation for comparison; it is possible that proper simd-ification can be done automatically.
+7. uint64-only implementation for comparison; it is possible that LLVM can batch uint64 operations into vector instructions with performance comparable to portable_simd.
 
 
 

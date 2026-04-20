@@ -12,6 +12,36 @@ pub mod simd;
 
 /// Compute Levenshtein distances from a single byte-slice to a list of byte-slices.
 /// result[i] = levenshtein(left, right[i])
+/// Exposing this implementation for benchmarking
+#[cfg(feature = "python")]
+#[pyfunction]
+#[pyo3(signature = (left, right, max_dist=254))]
+fn _compute_levenshtein_1_to_n_u64<'py>(
+    _py: Python<'py>,
+    left: &[u8],
+    right: Bound<'py, PyList>,
+    max_dist: i32,
+) -> PyResult<Vec<usize>> {
+    let rights_tmp: Vec<Bound<'py, PyBytes>> = right
+        .iter()
+        .map(|r| r.downcast_into::<PyBytes>().map_err(PyErr::from))
+        .collect::<PyResult<Vec<_>>>()?;
+    let rights: Vec<&[u8]> = rights_tmp
+        .iter()
+        .map(|b| b.as_bytes())
+        .collect::<Vec<&[u8]>>();
+    // .try_into()
+    // .unwrap();
+
+    // let rights_arr = right.iter().collect::<Vec<&[u8]>>();
+
+    let results =
+        levenshtein_simd::bitty_levenshtein_simd_by_1_limited_u64(&rights, left, max_dist as usize);
+    Ok(results.iter().map(|x| *x as usize).collect())
+}
+
+/// Compute Levenshtein distances from a single byte-slice to a list of byte-slices.
+/// result[i] = levenshtein(left, right[i])
 #[cfg(feature = "python")]
 #[pyfunction]
 #[pyo3(signature = (left, right, max_dist=254))]
@@ -108,6 +138,7 @@ fn compute_levenshtein_m_to_n<'py>(
 #[cfg(feature = "python")]
 #[pymodule]
 fn giga_levenshtein(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(_compute_levenshtein_1_to_n_u64, m)?)?;
     m.add_function(wrap_pyfunction!(compute_levenshtein_1_to_n, m)?)?;
     m.add_function(wrap_pyfunction!(compute_levenshtein_m_to_n, m)?)?;
     Ok(())

@@ -3,13 +3,15 @@
 
 // rust-side benches are a bit more precise and bypass python <> rust overhead
 
+use core::iter::Iterator;
+
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
 use giga_levenshtein::simd::{
     bitty_levenshtein_n_by_1, bitty_levenshtein_simd_by_1_limited,
-    bitty_levenshtein_simd_by_n_limited,
+    bitty_levenshtein_simd_by_1_limited_u64, bitty_levenshtein_simd_by_n_limited,
 };
 
 const N_SEQUENCE_OPTIONS: &[usize] = &[256usize];
@@ -114,6 +116,47 @@ fn bench_bitty_simd_1_to_n(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_bitty_u64_limited_1_to_n(c: &mut Criterion) {
+    let mut group = c.benchmark_group("bitty_u64_limited_1_to_n");
+    let seed: u64 = 42;
+
+    for &n_seqs in N_SEQUENCE_OPTIONS {
+        for &seq_len in SEQ_LEN_OPTIONS {
+            for &max_dist in &[8usize, 32, 128] {
+                let mut rng = StdRng::seed_from_u64(seed);
+
+                let query = random_byte_seq(&mut rng, seq_len);
+                let targets = random_byte_seqs(&mut rng, n_seqs, seq_len);
+
+                let param = format!("seqs={n_seqs}_len={seq_len}_maxd={max_dist}");
+
+                group.bench_function(BenchmarkId::new("bitty_u64_limited", &param), |b| {
+                    b.iter(|| {
+                        let slices: Vec<&[u8]> = targets.iter().map(|t| t.as_slice()).collect();
+                        let mut all_results: Vec<i32> = Vec::with_capacity(n_seqs);
+                        for chunk in slices.chunks(64) {
+                            if chunk.len() == 64 {
+                                let arr: &[&[u8]; 64] = chunk.try_into().unwrap();
+                                let arr_vec = arr.iter().cloned().collect::<Vec<&[u8]>>();
+                                let results = bitty_levenshtein_simd_by_1_limited_u64(
+                                    black_box(&arr_vec),
+                                    black_box(&query),
+                                    black_box(max_dist),
+                                );
+                                all_results.extend_from_slice(&results);
+                            } else {
+                                panic!("Chunk size is not 64");
+                            }
+                        }
+                        black_box(all_results);
+                    })
+                });
+            }
+        }
+    }
+    group.finish();
+}
+
 fn bench_bitty_simd_limited_1_to_n(c: &mut Criterion) {
     let mut group = c.benchmark_group("bitty_simd_limited_1_to_n");
     let seed: u64 = 42;
@@ -196,6 +239,7 @@ criterion_group!(
     bench_scalar_1_to_n,
     bench_bitty_simd_1_to_n,
     bench_bitty_simd_limited_1_to_n,
+    bench_bitty_u64_limited_1_to_n,
     bench_bitty_simd_limited_m_to_n,
 );
 criterion_main!(benches);

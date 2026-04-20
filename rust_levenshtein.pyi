@@ -1,3 +1,6 @@
+def _compute_levenshtein_1_to_n_u64(
+    left: bytes, right: list[bytes], max_dist: int = 254
+) -> list[int]: ...
 def compute_levenshtein_1_to_n(
     left: bytes, right: list[bytes], max_dist: int = 254
 ) -> list[int]: ...

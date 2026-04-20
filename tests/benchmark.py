@@ -54,6 +54,17 @@ def _timeit(fn, *args, repeats: int = 3) -> float:
 # ---------------------------------------------------------------------------
 
 
+def bench_1_to_n_u64(n: int, str_len: int) -> BenchResult:
+    left = random_bytes(str_len)
+    # n must be a multiple of 128 for bitty_simd
+    n = (n // -256) * -256
+    right = [random_bytes(str_len) for _ in range(n)]
+
+    py_ms = _timeit(py_1_to_n, left, right)
+    rs_ms = _timeit(giga_levenshtein._compute_levenshtein_1_to_n_u64, left, right)
+    return BenchResult(f"{1:>3}_to_{n} u64 (strlen={str_len})", py_ms, rs_ms)
+
+
 def bench_1_to_n(n: int, str_len: int) -> BenchResult:
     left = random_bytes(str_len)
     # n must be a multiple of 128 for bitty_simd
@@ -62,7 +73,7 @@ def bench_1_to_n(n: int, str_len: int) -> BenchResult:
 
     py_ms = _timeit(py_1_to_n, left, right)
     rs_ms = _timeit(giga_levenshtein.compute_levenshtein_1_to_n, left, right)
-    return BenchResult(f"1_to_{n}  (strlen={str_len})", py_ms, rs_ms)
+    return BenchResult(f"{1:>3}_to_{n}     (strlen={str_len})", py_ms, rs_ms)
 
 
 def bench_m_to_n(m: int, n: int, str_len: int) -> BenchResult:
@@ -71,7 +82,7 @@ def bench_m_to_n(m: int, n: int, str_len: int) -> BenchResult:
 
     py_ms = _timeit(py_m_to_n, left, right)
     rs_ms = _timeit(giga_levenshtein.compute_levenshtein_m_to_n, left, right)
-    return BenchResult(f"{m}_to_{n}  (strlen={str_len})", py_ms, rs_ms)
+    return BenchResult(f"{m:>3}_to_{n}     (strlen={str_len})", py_ms, rs_ms)
 
 
 def main(
@@ -86,6 +97,14 @@ def main(
     print("=" * 90)
 
     print("\n### compute_levenshtein_1_to_n ###\n")
+    # bitty_simd internally uses chunks of 256 for now
+    bitty_sizes = [256]
+    for n in bitty_sizes:
+        for sl in str_lens:
+            r = bench_1_to_n_u64(n, sl)
+            results.append(r)
+            print(r)
+
     # bitty_simd internally uses chunks of 256 for now
     bitty_sizes = [256]
     for n in bitty_sizes:

@@ -15,7 +15,7 @@ This implementation is going all-in on SIMD while still combining previous trick
 
 - ~ 100x faster than dynamic programming baseline in rust
 - 5x-8x faster than `python_levenshtein` on computing massive all-to-all distances
-  (FYI `python_levenshtein` has impressive performance)
+  (don't take this lightly, `python_levenshtein` has impressive performance)
 
 And we still use just 1 thread.
 
@@ -41,14 +41,15 @@ rustc 1.95.0-nightly (873b4beb0 2026-02-15)
 ```
 
 
-Some TODOs:
+Some improvements I'd like to cover:
 
 1. ~~better 'stride narrowing'~~
-2. more flexible wrapper
-3. support switch between 128/256/512-but wide SIMD
-4. smart (at least length-aware) prefiltering
-5. real-data benchmark
-6. uint64-only implementation for comparison; it is possible that LLVM can batch uint64 operations into vector instructions with performance comparable to portable_simd.
+2. smart (at least length-aware) prefiltering
+3. real-data benchmark
+4. ~~uint64-only implementation for comparison; it is possible that LLVM can batch uint64 operations into vector instructions with performance comparable to portable_simd.~~
+   - u64 version is surprisingly efficient, maybe I'll implement m-to-n version for it.
+   - u64 shows better performance than u8x8 SIMD while supposedly should use same/faster instructions.
+5. support switch between 128/256/512-but wide SIMD and u64
 
 
 

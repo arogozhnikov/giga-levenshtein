@@ -1,3 +1,4 @@
+use core::hint::black_box;
 use std::simd::cmp::SimdPartialEq;
 use std::simd::{Select, Simd};
 
@@ -93,19 +94,17 @@ where
     let mut curr_hn = vec![Bits::<M>::splat(0); blen];
 
     for i in 0..alen {
+        let mut is_matches: [Bits<M>; 256] = [Bits::<M>::splat(0); 256];
+
+        for s in 0..M {
+            let c = a[s][i] as usize;
+            is_matches[c][s / 8] |= 1u8 << (s % 8);
+        }
+
         let mut curr_dnp_j = Bits::<M>::splat(255);
 
-        let c_a: [Bits<M>; 8] = std::array::from_fn(|shift| {
-            Bits::<M>::from_array(std::array::from_fn(|s| a[shift + 8 * s][i] as u8))
-        });
-
         for (j, cb) in b.iter().enumerate() {
-            let mut is_match = Bits::<M>::splat(0);
-            for shift in 0..8 {
-                is_match |= c_a[shift]
-                    .simd_eq(Bits::<M>::splat(*cb))
-                    .select(Bits::<M>::splat(1 << shift), Bits::<M>::splat(0));
-            }
+            let is_match = is_matches[*cb as usize];
             let curr_vp_j: Bits<M>;
             let curr_vn_j: Bits<M>;
             if j == 0 {
@@ -141,6 +140,27 @@ where
     result
 }
 
+fn sum_masks_u64(masks: &[u64], result: &mut [i32; 64], add: bool) {
+    let mut accum = [0u64; 8];
+    for (i, mask) in masks.iter().enumerate() {
+        for shift in 0..8u8 {
+            accum[shift as usize] += (*mask >> shift) & 0x0101010101010101u64;
+        }
+        if i % 200 == 199 || i + 1 == masks.len() {
+            for shift in 0..8 {
+                for s in 0..8 {
+                    if add {
+                        result[shift + 8 * s] += ((accum[shift] >> 8 * s) & 255) as i32;
+                    } else {
+                        result[shift + 8 * s] -= ((accum[shift] >> 8 * s) & 255) as i32;
+                    }
+                }
+                accum[shift] = 0;
+            }
+        }
+    }
+}
+
 fn sum_masks<const M: usize>(masks: &[Bits<M>], result: &mut [i32; M], add: bool) {
     let mut accum = [Bits::<M>::splat(0); 8];
     for (i, mask) in masks.iter().enumerate() {
@@ -160,6 +180,79 @@ fn sum_masks<const M: usize>(masks: &[Bits<M>], result: &mut [i32; M], add: bool
             }
         }
     }
+}
+
+fn _bitty_levenshtein_u64_by_1_limited(a: &[&[u8]; 64], b: &[u8], max_dist: usize) -> [i32; 64] {
+    // similar to simd-by-1-limited, but does not use SIMD.
+    // surprisingly fast and does not need nightly.
+    let (alen, blen) = (a.iter().map(|x| x.len()).max().unwrap_or(0), b.len());
+    assert!(max_dist <= 254);
+
+    let maxval = (max_dist + 1) as i32;
+    if blen == 0 {
+        return std::array::from_fn(|i| (a[i].len() as i32).min(maxval));
+    };
+    if alen == 0 {
+        return [(blen as i32).min(maxval); 64];
+    }
+
+    // myers-style algo
+    let mut row_hp = vec![u64::MAX; blen];
+    let mut row_hn = vec![0u64; blen];
+
+    let pad_sizes: [usize; 64] = std::array::from_fn(|i| alen - a[i].len());
+
+    for i in 0..alen {
+        let mut mask_is_pad = 0u64;
+        let mut is_matches: [u64; 256] = [0u64; 256];
+
+        for s in 0..64 {
+            if i < pad_sizes[s] {
+                mask_is_pad |= 1u64 << s;
+            } else {
+                is_matches[a[s][i - pad_sizes[s]] as usize] |= 1u64 << s;
+            }
+        }
+
+        let lo = (i as i32 + blen as i32 - alen as i32 - max_dist as i32).max(0) as usize;
+        let hi = ((i as i32 + max_dist as i32 + 1 + blen as i32 - alen as i32) as usize).min(blen);
+
+        let mut prev_hp_j = mask_is_pad;
+        let mut prev_hn_j = !mask_is_pad;
+        let mut curr_dz_j = u64::MAX;
+
+        for j in lo..hi {
+            let prev_hn_jm1 = prev_hn_j;
+            let prev_hp_jm1 = prev_hp_j;
+            prev_hn_j = row_hn[j];
+            prev_hp_j = row_hp[j];
+
+            let is_match = is_matches[b[j] as usize];
+
+            // curr_d[j - i] = prev_h[ j - 1 ] + curr_v [ j ]
+            // res := curr_dp[j - 1] - prev_hp[j - 1] + prev_hn[j - 1];
+            let curr_dz_j_m1 = curr_dz_j;
+            let curr_vp_j = prev_hn_jm1 | !(curr_dz_j_m1 | prev_hp_jm1); // res > 0
+            let curr_vn_j = prev_hp_jm1 & curr_dz_j_m1; // res < 0
+
+            // curr_d[j], before we used previous variable
+            curr_dz_j = prev_hn_j | curr_vn_j | is_match;
+
+            // curr_h[j] = curr_d[j] - curr_v[j]
+            // res := curr_dp[j] - curr_vp[j] + curr_vn[j];
+            row_hp[j] = !(curr_dz_j | curr_vp_j) | curr_vn_j; // res > 0
+            row_hn[j] = curr_vp_j & curr_dz_j; // res < 0
+        }
+    }
+
+    let mut result = [0i32; 64];
+
+    sum_masks_u64(&row_hp, &mut result, true);
+    sum_masks_u64(&row_hn, &mut result, false);
+    for i in 0..64 {
+        result[i] = (result[i] + a[i].len() as i32).min(maxval);
+    }
+    result
 }
 
 pub fn bitty_levenshtein_simd_by_1_limited<const M: usize>(
@@ -414,6 +507,25 @@ pub fn bitty_levenshtein_n_by_1(a: &Vec<&[u8]>, b: &[u8]) -> Vec<i32> {
         .collect()
 }
 
+pub fn bitty_levenshtein_simd_by_1_limited_u64(
+    a: &Vec<&[u8]>,
+    b: &[u8],
+    max_dist: usize,
+) -> Vec<i32> {
+    assert!(!b.contains(&255));
+    const CHUNK_SIZE: usize = 64;
+
+    (*a).chunks(CHUNK_SIZE)
+        .flat_map(|chunk| {
+            if chunk.len() == CHUNK_SIZE {
+                _bitty_levenshtein_u64_by_1_limited(chunk.try_into().unwrap(), b, max_dist).to_vec()
+            } else {
+                panic!("chunk len is not {CHUNK_SIZE}",);
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -530,6 +642,38 @@ mod tests {
                         b,
                         b.len()
                     );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn stress_test_bitty_u64_by_1_limited_mixed_sizes() {
+        let all_seqs = get_many_sequences();
+        let all_seqs_chunks: Vec<[&[u8]; 64]> = all_seqs
+            .chunks(64)
+            .map(|chunk| chunk.try_into().unwrap())
+            .collect();
+
+        for b in all_seqs.iter() {
+            for max_dist in 1..22i32 {
+                for &input in all_seqs_chunks.iter() {
+                    let bitwise_results =
+                        _bitty_levenshtein_u64_by_1_limited(&input, b, max_dist as usize);
+
+                    for (i, &res) in bitwise_results.iter().enumerate() {
+                        let reference_uncut = _naive_levenshtein_1_on_1(input[i], b) as i32;
+                        let reference = reference_uncut.min(max_dist + 1);
+
+                        assert_eq!(
+                            res as i32,
+                            reference,
+                            "|{:?}| |{:?}| {} dist={max_dist}",
+                            input[i],
+                            b,
+                            b.len()
+                        );
+                    }
                 }
             }
         }

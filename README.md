@@ -47,8 +47,9 @@ Some improvements I'd like to cover:
 2. smart (at least length-aware) prefiltering
 3. real-data benchmark
 4. ~~uint64-only implementation for comparison; it is possible that LLVM can batch uint64 operations into vector instructions with performance comparable to portable_simd.~~
-   - u64 version is surprisingly efficient, maybe I'll implement m-to-n version for it.
    - u64 shows better performance than u8x8 SIMD while supposedly should use same/faster instructions.
+   - u64 version is surprisingly efficient, maybe I'll implement m-to-n version for it.
+     - upd: interestingly, u64 m x n version is 2.5x slower than simd with 256-bit vectors.
 5. support switch between 128/256/512-but wide SIMD and u64
 
 

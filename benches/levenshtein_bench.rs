@@ -10,8 +10,9 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
 use giga_levenshtein::simd::{
-    bitty_levenshtein_n_by_1, bitty_levenshtein_simd_by_1_limited,
-    bitty_levenshtein_simd_by_1_limited_u64, bitty_levenshtein_simd_by_n_limited,
+    bitty_levenshtein_64_by_n_limited, bitty_levenshtein_n_by_1,
+    bitty_levenshtein_simd_by_1_limited, bitty_levenshtein_simd_by_1_limited_u64,
+    bitty_levenshtein_simd_by_n_limited,
 };
 
 const N_SEQUENCE_OPTIONS: &[usize] = &[256usize];
@@ -223,6 +224,49 @@ fn bench_bitty_simd_limited_m_to_n(c: &mut Criterion) {
                                     black_box(max_dist),
                                 );
                                 all_results.extend_from_slice(&results);
+                            } else {
+                                panic!("Chunk size is not 256");
+                            }
+                        }
+                        black_box(all_results);
+                    })
+                });
+            }
+        }
+    }
+    group.finish();
+}
+
+fn bench_bitty_u64_limited_m_to_n(c: &mut Criterion) {
+    let mut group = c.benchmark_group("bitty_u64_limited_m_to_n");
+    let seed: u64 = 42;
+
+    for &n_seqs in N_SEQUENCE_OPTIONS {
+        for &seq_len in SEQ_LEN_OPTIONS {
+            for &max_dist in &[8usize, 32, 128] {
+                let mut rng = StdRng::seed_from_u64(seed);
+                let queries_tmp = random_byte_seqs_range(&mut rng, n_seqs, seq_len / 2, seq_len);
+                let queries: Vec<&[u8]> = queries_tmp.iter().map(|t| t.as_slice()).collect();
+                let targets_tmp = random_byte_seqs_range(&mut rng, 128, seq_len / 2, seq_len);
+                let targets: Vec<&[u8]> = targets_tmp.iter().map(|x| x.as_slice()).collect();
+
+                let param = format!("seqs={n_seqs}_len={seq_len}_maxd={max_dist}");
+
+                const CHUNK_SIZE: usize = 64;
+                group.bench_function(BenchmarkId::new("bitty_limited", &param), |b| {
+                    b.iter(|| {
+                        let mut all_results: Vec<Vec<i32>> = vec![vec![0; CHUNK_SIZE]; n_seqs];
+                        for q_chunk in queries.chunks(CHUNK_SIZE) {
+                            if q_chunk.len() == CHUNK_SIZE {
+                                let q_arr: &[&[u8]; CHUNK_SIZE] = q_chunk.try_into().unwrap();
+                                let results = bitty_levenshtein_64_by_n_limited(
+                                    black_box(q_arr),
+                                    black_box(&targets),
+                                    black_box(max_dist),
+                                );
+                                all_results.extend_from_slice(&results);
+                            } else {
+                                panic!("Chunk size is not 64");
                             }
                         }
                         black_box(all_results);
@@ -241,5 +285,6 @@ criterion_group!(
     bench_bitty_simd_limited_1_to_n,
     bench_bitty_u64_limited_1_to_n,
     bench_bitty_simd_limited_m_to_n,
+    bench_bitty_u64_limited_m_to_n,
 );
 criterion_main!(benches);

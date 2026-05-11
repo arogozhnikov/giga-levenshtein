@@ -354,6 +354,106 @@ where
     result
 }
 
+pub fn bitty_levenshtein_64_by_n_limited(
+    a: &[&[u8]; 64],
+    b: &Vec<&[u8]>,
+    max_dist: usize,
+) -> Vec<Vec<i32>> {
+    let alen = a.iter().map(|x| x.len()).max().unwrap_or(0);
+    let blen = b.iter().map(|x| x.len()).max().unwrap_or(0);
+    let pad_sizes: [usize; 64] = std::array::from_fn(|i| alen - a[i].len());
+
+    let maxval = (max_dist + 1) as i32;
+    if blen == 0 {
+        let res = a
+            .iter()
+            .map(|x| vec![(x.len() as i32).min(maxval); b.len()])
+            .collect();
+        return res;
+    }
+    if alen == 0 {
+        let lens: Vec<i32> = b.iter().map(|x| (x.len() as i32).min(maxval)).collect();
+        let res = vec![lens; a.len()];
+        return res;
+    }
+
+    // myers-style algo
+    let mut rows_hp = vec![vec![u64::MAX; blen]; b.len()];
+    let mut rows_hn = vec![vec![0u64; blen]; b.len()];
+
+    for i in 0..alen {
+        let mut is_matches = [0u64; 256];
+        let mut mask_is_pad = 0u64;
+
+        for s in 0..64 {
+            if i < pad_sizes[s] {
+                mask_is_pad |= 1u64 << s;
+            } else {
+                is_matches[a[s][i - pad_sizes[s]] as usize] |= 1u64 << s;
+            }
+        }
+
+        for (bseq_id, bseq) in b.iter().enumerate() {
+            let row_hp = &mut rows_hp[bseq_id];
+            let row_hn = &mut rows_hn[bseq_id];
+
+            let mut prev_hp_j = mask_is_pad;
+            let mut prev_hn_j = !mask_is_pad;
+            let mut curr_dz_j = u64::MAX;
+
+            let lo = (i as i32 + bseq.len() as i32 - alen as i32 - max_dist as i32).max(0) as usize;
+            let hi = ((i as i32 + max_dist as i32 + 1 + bseq.len() as i32 - alen as i32) as usize)
+                .min(bseq.len());
+
+            for j in lo..hi {
+                let prev_hp_jm1 = prev_hp_j;
+                let prev_hn_jm1 = prev_hn_j;
+
+                prev_hp_j = row_hp[j];
+                prev_hn_j = row_hn[j];
+
+                let is_match = is_matches[bseq[j] as usize];
+                // curr_d[j - i] = prev_h[ j - 1 ] + curr_v [ j ]
+                // res := curr_dp[j - 1] - prev_hp[j - 1] + prev_hn[j - 1];
+                let curr_dz_j_m1 = curr_dz_j;
+                let curr_vp_j = prev_hn_jm1 | !(curr_dz_j_m1 | prev_hp_jm1); // res > 0
+                let curr_vn_j = prev_hp_jm1 & curr_dz_j_m1; // res < 0
+
+                // curr_d[j], before we used previous variable
+                curr_dz_j = prev_hn_j | curr_vn_j | is_match;
+
+                // curr_h[j] = curr_d[j] - curr_v[j]
+                // res := curr_dp[j] - curr_vp[j] + curr_vn[j];
+                row_hp[j] = !(curr_dz_j | curr_vp_j) | curr_vn_j; // res > 0
+                row_hn[j] = curr_vp_j & curr_dz_j; // res < 0
+            }
+        }
+    }
+
+    let mut result = vec![vec![0i32; b.len()]; a.len()];
+
+    let maxval = (max_dist + 1) as i32;
+
+    for j in 0..b.len() {
+        if b[j].len() == 0 {
+            for i in 0..a.len() {
+                result[i][j] = (a[i].len() as i32).min(maxval);
+            }
+        } else {
+            let mut result_j = [0i32; 64];
+
+            sum_masks_u64(&rows_hp[j][..b[j].len()], &mut result_j, true);
+            sum_masks_u64(&rows_hn[j][..b[j].len()], &mut result_j, false);
+
+            for (i, &res) in result_j.iter().enumerate() {
+                result[i][j] = (res + a[i].len() as i32).min(maxval);
+            }
+        }
+    }
+
+    result
+}
+
 pub fn bitty_levenshtein_simd_by_n_limited<const M: usize>(
     a: &[&[u8]; M],
     b: &Vec<&[u8]>,
@@ -673,6 +773,59 @@ mod tests {
                             b,
                             b.len()
                         );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn stress_test_bitty_u64_by_n_limited() {
+        let source_a_seqs = get_many_sequences();
+
+        for max_aseqs in [1, 2, 4, 10, 20] {
+            for n_bseqs in [1, 17, 302] {
+                for max_blen in [0, 2, 4, 7, 20] {
+                    for max_dist in 0..10i32 {
+                        let n_a_seqs = max_aseqs.min(source_a_seqs.len());
+                        let a_strs: [&[u8]; 64] =
+                            std::array::from_fn(|i| source_a_seqs[i % n_a_seqs]);
+                        // pad all a_strs to same length
+                        let a_strs = if max_blen > 0 {
+                            a_strs.map(|s| {
+                                let mut padded = vec![0u8; max_blen];
+                                let taken_len = max_blen.min(s.len());
+                                padded[..taken_len].copy_from_slice(&s[..taken_len]);
+                                padded.leak() as &[u8]
+                            })
+                        } else {
+                            a_strs
+                        };
+
+                        let b_strs: Vec<&[u8]> = get_many_sequences()
+                            .into_iter()
+                            .cycle()
+                            .take(n_bseqs)
+                            .collect();
+
+                        let bitwise_results =
+                            bitty_levenshtein_64_by_n_limited(&a_strs, &b_strs, max_dist as usize);
+
+                        for (i, res) in bitwise_results.iter().enumerate() {
+                            for (j, &b_str) in b_strs.iter().enumerate() {
+                                let reference_uncut =
+                                    _naive_levenshtein_1_on_1(a_strs[i], b_str) as i32;
+                                let reference = reference_uncut.min(max_dist + 1);
+
+                                assert_eq!(
+                                    (*res)[j] as i32,
+                                    reference,
+                                    "|{:?}| |{b_str:?}| {} dist={max_dist}",
+                                    a_strs[i],
+                                    b_str.len(),
+                                );
+                            }
+                        }
                     }
                 }
             }

@@ -1,4 +1,3 @@
-#![feature(portable_simd)]
 #![feature(generic_const_exprs)]
 
 // rust-side benches are a bit more precise and bypass python <> rust overhead

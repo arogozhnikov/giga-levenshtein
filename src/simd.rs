@@ -1,4 +1,3 @@
-use core::hint::black_box;
 use std::simd::cmp::SimdPartialEq;
 use std::simd::{Select, Simd};
 
@@ -20,10 +19,10 @@ fn _naive_levenshtein_1_on_1(a: &[u8], b: &[u8]) -> i32 {
 /// bitty: myers-style algo
 /// this is "simplified reference" for following implementations
 fn _bitty_levenshtein_1_on_1(a: &[u8], b: &[u8]) -> i32 {
-    if b.len() == 0 {
+    if b.is_empty() {
         return a.len() as i32;
     };
-    if a.len() == 0 {
+    if a.is_empty() {
         return b.len() as i32;
     }
     let n = b.len();
@@ -150,9 +149,9 @@ fn sum_masks_u64(masks: &[u64], result: &mut [i32; 64], add: bool) {
             for shift in 0..8 {
                 for s in 0..8 {
                     if add {
-                        result[shift + 8 * s] += ((accum[shift] >> 8 * s) & 255) as i32;
+                        result[shift + 8 * s] += ((accum[shift] >> (8 * s)) & 255) as i32;
                     } else {
-                        result[shift + 8 * s] -= ((accum[shift] >> 8 * s) & 255) as i32;
+                        result[shift + 8 * s] -= ((accum[shift] >> (8 * s)) & 255) as i32;
                     }
                 }
                 accum[shift] = 0;
@@ -279,7 +278,7 @@ where
     let pad_sizes: [usize; M] = std::array::from_fn(|i| alen - a[i].len());
     let padded_a: [&[u8]; M] = std::array::from_fn(|i| {
         let mut padded = vec![b' '; pad_sizes[i]];
-        padded.extend_from_slice(&a[i]);
+        padded.extend_from_slice(a[i]);
         padded.leak() as &[u8]
     });
 
@@ -435,7 +434,7 @@ pub fn bitty_levenshtein_64_by_n_limited(
     let maxval = (max_dist + 1) as i32;
 
     for j in 0..b.len() {
-        if b[j].len() == 0 {
+        if b[j].is_empty() {
             for i in 0..a.len() {
                 result[i][j] = (a[i].len() as i32).min(maxval);
             }
@@ -584,7 +583,7 @@ where
 
     let mut result = vec![vec![maxval; b.len()]; a.len()];
     for &(j, bseq) in enumed_bsecs.iter() {
-        if bseq.len() == 0 {
+        if bseq.is_empty() {
             for i in 0..a.len() {
                 result[i][j] = (a[i].len() as i32).min(maxval);
             }
@@ -640,7 +639,7 @@ pub fn bitty_levenshtein_simd_by_1_limited_u64(
 #[cfg(test)]
 mod tests {
     use super::*;
-    const SHORT_TEST_SEQS: [&'static [u8]; 70] = [
+    const SHORT_TEST_SEQS: [&[u8]; 70] = [
         b"", b"a", b"aa", b"aaa", b"aaaa", b"ab", b"ba", b"ac", b"aab", b"bab", b"abab", b"baba",
         b"Z9", b"k3x", b"T", b"q7", b"mN2", b"r", b"8b", b"L0p", b"dx", b"Y", b"w4R", b"3", b"tK",
         b"p9q", b"H2", b"s", b"Vx1", b"7", b"nB", b"c4", b"J", b"u8m", b"5t", b"g", b"R2d", b"y",
@@ -649,7 +648,7 @@ mod tests {
         b"y7", b"k", b"D3", b"0x", b"n", b"B8q",
     ];
 
-    const TEST_SEQS_LONG: [&'static [u8]; 17] = [
+    const TEST_SEQS_LONG: [&[u8]; 17] = [
         b"",
         b" ",
         b"  ",
@@ -687,8 +686,8 @@ mod tests {
     fn stress_test_bitty_1_on_1() {
         for a in SHORT_TEST_SEQS.iter() {
             for b in SHORT_TEST_SEQS.iter() {
-                let bitwise_result = _bitty_levenshtein_1_on_1(a, b) as i32;
-                let reference = _naive_levenshtein_1_on_1(a, b) as i32;
+                let bitwise_result = _bitty_levenshtein_1_on_1(a, b);
+                let reference = _naive_levenshtein_1_on_1(a, b);
                 assert_eq!(bitwise_result, reference);
             }
         }
@@ -704,8 +703,8 @@ mod tests {
 
                 let bitwise_results = _bitty_levenshtein_simd_by_1::<256>(&input, b);
                 for (i, res) in bitwise_results.into_iter().enumerate() {
-                    let reference = _naive_levenshtein_1_on_1(input[i], b) as i32;
-                    assert_eq!(res as i32, reference, "{a:?} {b:?} {i}");
+                    let reference = _naive_levenshtein_1_on_1(input[i], b);
+                    assert_eq!(res, reference, "{a:?} {b:?} {i}");
                 }
             }
         }
@@ -721,8 +720,8 @@ mod tests {
                     let bitwise_results =
                         bitty_levenshtein_simd_by_1_limited::<256>(&input, b, max_dist as usize);
 
-                    let result = bitwise_results[0] as i32;
-                    let reference_uncut = _naive_levenshtein_1_on_1(input[0], b) as i32;
+                    let result = bitwise_results[0];
+                    let reference_uncut = _naive_levenshtein_1_on_1(input[0], b);
                     let reference = reference_uncut.min(max_dist + 1);
                     assert_eq!(result, reference, "{a:?} {b:?} {max_dist}");
                 }
@@ -742,11 +741,11 @@ mod tests {
                     bitty_levenshtein_simd_by_1_limited::<256>(&input, b, max_dist as usize);
 
                 for (i, &res) in bitwise_results.iter().enumerate() {
-                    let reference_uncut = _naive_levenshtein_1_on_1(input[i], b) as i32;
+                    let reference_uncut = _naive_levenshtein_1_on_1(input[i], b);
                     let reference = reference_uncut.min(max_dist + 1);
 
                     assert_eq!(
-                        res as i32,
+                        res,
                         reference,
                         "|{:?}| |{:?}| {} dist={max_dist}",
                         input[i],
@@ -773,11 +772,11 @@ mod tests {
                         _bitty_levenshtein_u64_by_1_limited(&input, b, max_dist as usize);
 
                     for (i, &res) in bitwise_results.iter().enumerate() {
-                        let reference_uncut = _naive_levenshtein_1_on_1(input[i], b) as i32;
+                        let reference_uncut = _naive_levenshtein_1_on_1(input[i], b);
                         let reference = reference_uncut.min(max_dist + 1);
 
                         assert_eq!(
-                            res as i32,
+                            res,
                             reference,
                             "|{:?}| |{:?}| {} dist={max_dist}",
                             input[i],
@@ -824,12 +823,11 @@ mod tests {
 
                         for (i, res) in bitwise_results.iter().enumerate() {
                             for (j, &b_str) in b_strs.iter().enumerate() {
-                                let reference_uncut =
-                                    _naive_levenshtein_1_on_1(a_strs[i], b_str) as i32;
+                                let reference_uncut = _naive_levenshtein_1_on_1(a_strs[i], b_str);
                                 let reference = reference_uncut.min(max_dist + 1);
 
                                 assert_eq!(
-                                    (*res)[j] as i32,
+                                    (*res)[j],
                                     reference,
                                     "|{:?}| |{b_str:?}| {} dist={max_dist}",
                                     a_strs[i],
@@ -867,11 +865,11 @@ mod tests {
 
                     for (res, &a_str) in bitwise_results.iter().zip(a_strs.iter()) {
                         for (j, &b_str) in b_strs.iter().enumerate() {
-                            let reference_uncut = _naive_levenshtein_1_on_1(a_str, b_str) as i32;
+                            let reference_uncut = _naive_levenshtein_1_on_1(a_str, b_str);
                             let reference = reference_uncut.min(max_dist + 1);
 
                             assert_eq!(
-                                (*res)[j] as i32,
+                                (*res)[j],
                                 reference,
                                 "|{a_str:?}| |{b_str:?}| max_dist={max_dist}"
                             );

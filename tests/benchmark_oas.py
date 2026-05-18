@@ -58,7 +58,7 @@ def get_oas_sequences() -> list[bytes]:
         Path(__file__).parent.parent / "benches/heavy_seqs.txt.gz", "rb"
     ) as f:
         result = [line.strip()[:500] for line in f]
-        result = result[:1024]
+        result = result[:1000]  # intentionally not divisible by 256 to force padding
         return result
 
 

@@ -1,7 +1,6 @@
 #![feature(portable_simd)]
 #![feature(generic_const_exprs)]
 
-use std::hint::black_box;
 #[cfg(feature = "python")]
 use {
     crate::simd as levenshtein_simd,
@@ -95,13 +94,15 @@ fn compute_levenshtein_m_to_n<'py>(
     let rights: Vec<&[u8]> = right_bounds.iter().map(|b| b.as_bytes()).collect();
 
     let mut result = vec![vec![]; lefts.len()];
+    let mut left_order: Vec<usize> = (0..lefts.len()).collect();
+    left_order.sort_unstable_by_key(|&idx| lefts[idx].len());
     let padding_slice: &[u8] = b"";
 
-    for (chunk_idx, chunk) in lefts.chunks(CHUNK_SIZE).enumerate() {
+    for chunk in left_order.chunks(CHUNK_SIZE) {
         let chunk_len = chunk.len();
         let mut chunk_arr = [&[] as &[u8]; CHUNK_SIZE];
-        for (k, &left) in chunk.iter().enumerate() {
-            chunk_arr[k] = left;
+        for (k, &left_idx) in chunk.iter().enumerate() {
+            chunk_arr[k] = lefts[left_idx];
         }
         for k in chunk_len..CHUNK_SIZE {
             chunk_arr[k] = padding_slice;
@@ -113,10 +114,8 @@ fn compute_levenshtein_m_to_n<'py>(
             max_dist as usize,
         );
 
-        let result_offset = chunk_idx * CHUNK_SIZE;
-        for k in 0..chunk_len {
-            result[result_offset + k] =
-                chunk_res[k].iter().map(|&x| x as usize).collect::<Vec<_>>();
+        for (k, &left_idx) in chunk.iter().enumerate() {
+            result[left_idx] = chunk_res[k].iter().map(|&x| x as usize).collect::<Vec<_>>();
         }
     }
 

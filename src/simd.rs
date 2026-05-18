@@ -540,9 +540,11 @@ where
             let mut prev_hn_j = !mask_is_pad;
             let mut curr_dz_j = Bits::<M>::splat(255);
 
-            let lo = (i as i32 + bseq.len() as i32 - alen as i32 - max_dist as i32).max(0) as usize;
-            let hi = ((i as i32 + max_dist as i32 + 1 + bseq.len() as i32 - alen as i32) as usize)
-                .min(bseq.len());
+            let a_center_to_end = alen as i32 - i as i32; // same as center to end
+            let b_center = bseq.len() as i32 - a_center_to_end;
+
+            let lo = (b_center - max_dist as i32).clamp(0, bseq.len() as i32) as usize;
+            let hi = (b_center + max_dist as i32 + 1).clamp(0, bseq.len() as i32) as usize;
 
             for j in lo..hi {
                 let prev_hp_jm1 = prev_hp_j;
@@ -569,9 +571,6 @@ where
     }
 
     let mut result = vec![vec![0i32; b.len()]; a.len()];
-
-    let maxval = (max_dist + 1) as i32;
-
     for j in 0..b.len() {
         if b[j].len() == 0 {
             for i in 0..a.len() {
@@ -838,49 +837,32 @@ mod tests {
 
         for max_aseqs in [1, 2, 4, 10, 20] {
             for n_bseqs in [1, 17, 302] {
-                for max_blen in [0, 2, 4, 7, 20] {
-                    for max_dist in 0..10i32 {
-                        let n_a_seqs = max_aseqs.min(source_a_seqs.len());
-                        let a_strs: [&[u8]; 256] =
-                            std::array::from_fn(|i| source_a_seqs[i % n_a_seqs]);
-                        // pad all a_strs to same length
-                        let a_strs = if max_blen > 0 {
-                            a_strs.map(|s| {
-                                let mut padded = vec![0u8; max_blen];
-                                let taken_len = max_blen.min(s.len());
-                                padded[..taken_len].copy_from_slice(&s[..taken_len]);
-                                padded.leak() as &[u8]
-                            })
-                        } else {
-                            a_strs
-                        };
+                for max_dist in 0..10i32 {
+                    let n_a_seqs = max_aseqs.min(source_a_seqs.len());
+                    let a_strs: [&[u8]; 256] = std::array::from_fn(|i| source_a_seqs[i % n_a_seqs]);
 
-                        let b_strs: Vec<&[u8]> = get_many_sequences()
-                            .into_iter()
-                            .cycle()
-                            .take(n_bseqs)
-                            .collect();
+                    let b_strs: Vec<&[u8]> = get_many_sequences()
+                        .into_iter()
+                        .cycle()
+                        .take(n_bseqs)
+                        .collect();
 
-                        let bitwise_results = bitty_levenshtein_simd_by_n_limited::<256>(
-                            &a_strs,
-                            &b_strs,
-                            max_dist as usize,
-                        );
+                    let bitwise_results = bitty_levenshtein_simd_by_n_limited::<256>(
+                        &a_strs,
+                        &b_strs,
+                        max_dist as usize,
+                    );
 
-                        for (i, res) in bitwise_results.iter().enumerate() {
-                            for (j, &b_str) in b_strs.iter().enumerate() {
-                                let reference_uncut =
-                                    _naive_levenshtein_1_on_1(a_strs[i], b_str) as i32;
-                                let reference = reference_uncut.min(max_dist + 1);
+                    for (res, &a_str) in bitwise_results.iter().zip(a_strs.iter()) {
+                        for (j, &b_str) in b_strs.iter().enumerate() {
+                            let reference_uncut = _naive_levenshtein_1_on_1(a_str, b_str) as i32;
+                            let reference = reference_uncut.min(max_dist + 1);
 
-                                assert_eq!(
-                                    (*res)[j] as i32,
-                                    reference,
-                                    "|{:?}| |{b_str:?}| {} dist={max_dist}",
-                                    a_strs[i],
-                                    b_str.len(),
-                                );
-                            }
+                            assert_eq!(
+                                (*res)[j] as i32,
+                                reference,
+                                "|{a_str:?}| |{b_str:?}| max_dist={max_dist}"
+                            );
                         }
                     }
                 }

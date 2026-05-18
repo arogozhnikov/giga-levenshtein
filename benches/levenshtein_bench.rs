@@ -278,6 +278,34 @@ fn bench_bitty_u64_limited_m_to_n(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_bitty_simd_limited_m_to_n_random(c: &mut Criterion) {
+    let mut group = c.benchmark_group("bitty_simd_limited_m_to_n_random");
+    let max_dist = 8;
+
+    const CHUNK_SIZE: usize = 256;
+    let mut rng = StdRng::seed_from_u64(42);
+
+    // random sequences of lengths 1..256
+    let q = random_byte_seqs_range(&mut rng, CHUNK_SIZE, 1, 1024);
+    let q: Vec<&[u8]> = q.iter().map(|x| x.as_slice()).collect();
+    let k = random_byte_seqs_range(&mut rng, CHUNK_SIZE, 1, 1024);
+    let k: Vec<&[u8]> = k.iter().map(|x| x.as_slice()).collect();
+
+    group.bench_function(BenchmarkId::new("bitty_limited", "random"), |b| {
+        b.iter(|| {
+            let q_arr: &[&[u8]; CHUNK_SIZE] = q.as_slice().try_into().unwrap();
+            let results = bitty_levenshtein_simd_by_n_limited::<CHUNK_SIZE>(
+                black_box(q_arr),
+                black_box(&k),
+                black_box(max_dist),
+            );
+            black_box(results);
+        })
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_scalar_1_to_n,
@@ -286,5 +314,6 @@ criterion_group!(
     bench_bitty_u64_limited_1_to_n,
     bench_bitty_simd_limited_m_to_n,
     bench_bitty_u64_limited_m_to_n,
+    bench_bitty_simd_limited_m_to_n_random,
 );
 criterion_main!(benches);

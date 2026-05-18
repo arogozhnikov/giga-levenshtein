@@ -1,6 +1,7 @@
 #![feature(portable_simd)]
 #![feature(generic_const_exprs)]
 
+use std::hint::black_box;
 #[cfg(feature = "python")]
 use {
     crate::simd as levenshtein_simd,
@@ -93,46 +94,33 @@ fn compute_levenshtein_m_to_n<'py>(
     let lefts: Vec<&[u8]> = left_bounds.iter().map(|b| b.as_bytes()).collect();
     let rights: Vec<&[u8]> = right_bounds.iter().map(|b| b.as_bytes()).collect();
 
-    let mut indices: Vec<usize> = (0..lefts.len()).collect();
-    indices.sort_by_key(|&idx| lefts[idx].len());
-
-    let mut result_indexed = vec![vec![]; lefts.len()];
+    let mut result = vec![vec![]; lefts.len()];
     let padding_slice: &[u8] = b"";
 
-    let mut i = 0;
-    while i < indices.len() {
-        let current_len = lefts[indices[i]].len();
-        let mut j = i;
-        while j < indices.len() && lefts[indices[j]].len() == current_len {
-            j += 1;
+    for (chunk_idx, chunk) in lefts.chunks(CHUNK_SIZE).enumerate() {
+        let chunk_len = chunk.len();
+        let mut chunk_arr = [&[] as &[u8]; CHUNK_SIZE];
+        for (k, &left) in chunk.iter().enumerate() {
+            chunk_arr[k] = left;
+        }
+        for k in chunk_len..CHUNK_SIZE {
+            chunk_arr[k] = padding_slice;
         }
 
-        let same_len_indices = &indices[i..j];
-        for chunk in same_len_indices.chunks(CHUNK_SIZE) {
-            let chunk_len = chunk.len();
-            let mut chunk_arr = [&[] as &[u8]; CHUNK_SIZE];
-            for (k, &idx) in chunk.iter().enumerate() {
-                chunk_arr[k] = lefts[idx];
-            }
-            for k in chunk_len..CHUNK_SIZE {
-                chunk_arr[k] = padding_slice;
-            }
+        let chunk_res = levenshtein_simd::bitty_levenshtein_simd_by_n_limited::<CHUNK_SIZE>(
+            &chunk_arr,
+            &rights,
+            max_dist as usize,
+        );
 
-            let chunk_res = levenshtein_simd::bitty_levenshtein_simd_by_n_limited::<CHUNK_SIZE>(
-                &chunk_arr,
-                &rights,
-                max_dist as usize,
-            );
-
-            for k in 0..chunk_len {
-                result_indexed[chunk[k]] =
-                    chunk_res[k].iter().map(|&x| x as usize).collect::<Vec<_>>();
-            }
+        let result_offset = chunk_idx * CHUNK_SIZE;
+        for k in 0..chunk_len {
+            result[result_offset + k] =
+                chunk_res[k].iter().map(|&x| x as usize).collect::<Vec<_>>();
         }
-        i = j;
     }
 
-    Ok(result_indexed)
+    Ok(result)
 }
 
 #[cfg(feature = "python")]

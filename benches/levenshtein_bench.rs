@@ -1,4 +1,3 @@
-#![feature(portable_simd)]
 #![feature(generic_const_exprs)]
 
 // rust-side benches are a bit more precise and bypass python <> rust overhead
@@ -138,7 +137,7 @@ fn bench_bitty_u64_limited_1_to_n(c: &mut Criterion) {
                         for chunk in slices.chunks(64) {
                             if chunk.len() == 64 {
                                 let arr: &[&[u8]; 64] = chunk.try_into().unwrap();
-                                let arr_vec = arr.iter().cloned().collect::<Vec<&[u8]>>();
+                                let arr_vec = arr.to_vec();
                                 let results = bitty_levenshtein_simd_by_1_limited_u64(
                                     black_box(&arr_vec),
                                     black_box(&query),

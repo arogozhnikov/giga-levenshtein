@@ -30,10 +30,6 @@ fn _compute_levenshtein_1_to_n_u64<'py>(
         .iter()
         .map(|b| b.as_bytes())
         .collect::<Vec<&[u8]>>();
-    // .try_into()
-    // .unwrap();
-
-    // let rights_arr = right.iter().collect::<Vec<&[u8]>>();
 
     let results =
         levenshtein_simd::bitty_levenshtein_simd_by_1_limited_u64(&rights, left, max_dist as usize);
@@ -96,16 +92,11 @@ fn compute_levenshtein_m_to_n<'py>(
     let mut result = vec![vec![]; lefts.len()];
     let mut left_order: Vec<usize> = (0..lefts.len()).collect();
     left_order.sort_unstable_by_key(|&idx| lefts[idx].len());
-    let padding_slice: &[u8] = b"";
 
     for chunk in left_order.chunks(CHUNK_SIZE) {
-        let chunk_len = chunk.len();
         let mut chunk_arr = [&[] as &[u8]; CHUNK_SIZE];
         for (k, &left_idx) in chunk.iter().enumerate() {
             chunk_arr[k] = lefts[left_idx];
-        }
-        for k in chunk_len..CHUNK_SIZE {
-            chunk_arr[k] = padding_slice;
         }
 
         let chunk_res = levenshtein_simd::bitty_levenshtein_simd_by_n_limited::<CHUNK_SIZE>(

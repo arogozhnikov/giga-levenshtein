@@ -480,6 +480,18 @@ where
         return res;
     }
 
+    let enumed_bsecs = {
+        // do not compute for sequences that are too short or too long
+        let min_alen = a.iter().map(|x| x.len()).min().unwrap_or(0);
+        let max_alen = a.iter().map(|x| x.len()).max().unwrap_or(0);
+        b.iter()
+            .enumerate()
+            .filter(|(_, s)| s.len() <= max_alen + max_dist)
+            .filter(|(_, s)| s.len() + max_dist >= min_alen)
+            .map(|(i, s)| (i, *s))
+            .collect::<Vec<(usize, &[u8])>>()
+    };
+
     let present_chars = {
         let mut char_is_present_in_b = [false; 256];
         for bseq in b {
@@ -532,7 +544,7 @@ where
             mask
         };
 
-        for (bseq_id, bseq) in b.iter().enumerate() {
+        for &(bseq_id, bseq) in enumed_bsecs.iter() {
             let row_hp = &mut rows_hp[bseq_id];
             let row_hn = &mut rows_hn[bseq_id];
 
@@ -570,17 +582,17 @@ where
         }
     }
 
-    let mut result = vec![vec![0i32; b.len()]; a.len()];
-    for j in 0..b.len() {
-        if b[j].len() == 0 {
+    let mut result = vec![vec![maxval; b.len()]; a.len()];
+    for &(j, bseq) in enumed_bsecs.iter() {
+        if bseq.len() == 0 {
             for i in 0..a.len() {
                 result[i][j] = (a[i].len() as i32).min(maxval);
             }
         } else {
             let mut result_j = [0i32; M];
 
-            sum_masks(&rows_hp[j][..b[j].len()], &mut result_j, true);
-            sum_masks(&rows_hn[j][..b[j].len()], &mut result_j, false);
+            sum_masks(&rows_hp[j][..bseq.len()], &mut result_j, true);
+            sum_masks(&rows_hn[j][..bseq.len()], &mut result_j, false);
 
             for (i, &res) in result_j.iter().enumerate() {
                 result[i][j] = (res + a[i].len() as i32).min(maxval);
